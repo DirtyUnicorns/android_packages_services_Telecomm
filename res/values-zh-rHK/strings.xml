@@ -48,4 +48,6 @@
     <string name="change_default_dialer_dialog_title" msgid="4430590714918044425">"變更預設撥號器應用程式？"</string>
     <string name="change_default_dialer_with_previous_app_set_text" msgid="3213396537499337949">"使用 <xliff:g id="NEW_APP">%1$s</xliff:g> 取代 <xliff:g id="CURRENT_APP">%2$s</xliff:g> 作為預設撥號器應用程式？"</string>
     <string name="change_default_dialer_no_previous_app_set_text" msgid="7608426684114545221">"使用 <xliff:g id="NEW_APP">%s</xliff:g> 為預設撥號器應用程式？"</string>
+    <string name="headset_plugin_view_text">耳機已插入到手機</string>
+    <string name="headset_plugin_view_title">耳機插入</string>
 </resources>
