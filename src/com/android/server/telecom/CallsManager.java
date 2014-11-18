@@ -42,8 +42,11 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.telephony.CallStateException;
+import com.android.internal.telephony.CallerInfo;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyProperties;
+import com.android.internal.telephony.util.BlacklistUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.telecom.components.ErrorDialogActivity;
 
@@ -136,6 +139,7 @@ public class CallsManager extends Call.ListenerBase implements VideoProviderProx
     private final CallerInfoAsyncQueryFactory mCallerInfoAsyncQueryFactory;
     private final PhoneAccountRegistrar mPhoneAccountRegistrar;
     private final MissedCallNotifier mMissedCallNotifier;
+    private final BlacklistCallNotifier mBlacklistCallNotifier;
     private final Set<Call> mLocallyDisconnectingCalls = new HashSet<>();
     private final Set<Call> mPendingCallsToDisconnect = new HashSet<>();
     /* Handler tied to thread in which CallManager was initialized. */
@@ -163,13 +167,15 @@ public class CallsManager extends Call.ListenerBase implements VideoProviderProx
             PhoneAccountRegistrar phoneAccountRegistrar,
             HeadsetMediaButtonFactory headsetMediaButtonFactory,
             ProximitySensorManagerFactory proximitySensorManagerFactory,
-            InCallWakeLockControllerFactory inCallWakeLockControllerFactory) {
+            InCallWakeLockControllerFactory inCallWakeLockControllerFactory,
+            BlacklistCallNotifier blacklistCallNotifier) {
         mContext = context;
         mLock = lock;
         mContactsAsyncHelper = contactsAsyncHelper;
         mCallerInfoAsyncQueryFactory = callerInfoAsyncQueryFactory;
         mPhoneAccountRegistrar = phoneAccountRegistrar;
         mMissedCallNotifier = missedCallNotifier;
+        mBlacklistCallNotifier = blacklistCallNotifier;
         StatusBarNotifier statusBarNotifier = new StatusBarNotifier(context, this);
         mWiredHeadsetManager = new WiredHeadsetManager(context);
         mDockManager = new DockManager(context);
@@ -246,16 +252,21 @@ public class CallsManager extends Call.ListenerBase implements VideoProviderProx
     @Override
     public void onSuccessfulIncomingCall(Call incomingCall) {
         Log.d(this, "onSuccessfulIncomingCall");
-        setCallState(incomingCall, CallState.RINGING, "successful incoming call");
-
-        if (hasMaximumRingingCalls() || hasMaximumDialingCalls()) {
-            incomingCall.reject(false, null);
-            // since the call was not added to the list of calls, we have to call the missed
-            // call notifier and the call logger manually.
-            mMissedCallNotifier.showMissedCallNotification(incomingCall);
-            mCallLogManager.logCall(incomingCall, Calls.MISSED_TYPE);
+        if (isCallBlacklisted(incomingCall)) {
+            mCallLogManager.logCall(incomingCall, Calls.BLACKLIST_TYPE);
+            incomingCall.setDisconnectCause(
+                    new DisconnectCause(android.telephony.DisconnectCause.CALL_BLACKLISTED));
         } else {
-            addCall(incomingCall);
+            setCallState(incomingCall, CallState.RINGING, "ringing set explicitly");
+            if (hasMaximumRingingCalls() || hasMaximumDialingCalls()) {
+                incomingCall.reject(false, null);
+                // since the call was not added to the list of calls, we have to call the missed
+                // call notifier and the call logger manually.
+                mMissedCallNotifier.showMissedCallNotification(incomingCall);
+                mCallLogManager.logCall(incomingCall, Calls.MISSED_TYPE);
+            } else {
+                addCall(incomingCall);
+            }
         }
     }
 
@@ -1245,6 +1256,14 @@ public class CallsManager extends Call.ListenerBase implements VideoProviderProx
     }
 
     /**
+     * Retrieves the {@link MissedCallNotifier}
+     * @return The {@link MissedCallNotifier}.
+     */
+    BlacklistCallNotifier getBlacklistCallNotifier() {
+        return mBlacklistCallNotifier;
+    }
+
+    /**
      * Adds the specified call to the main list of live calls.
      *
      * @param call The call to add.
@@ -1675,24 +1694,18 @@ public class CallsManager extends Call.ListenerBase implements VideoProviderProx
         }
     }
 
-    /**
-    * For some disconnected causes, we show a dialog when it's a mmi code or potential mmi code.
-    *
-    * @param call The call.
-    */
-    private void maybeShowErrorDialogOnDisconnect(Call call) {
-        if (call.getState() == CallState.DISCONNECTED && (isPotentialMMICode(call.getHandle())
-                || isPotentialInCallMMICode(call.getHandle()))) {
-            DisconnectCause disconnectCause = call.getDisconnectCause();
-            if (!TextUtils.isEmpty(disconnectCause.getDescription()) && (disconnectCause.getCode()
-                    == DisconnectCause.ERROR)) {
-                Intent errorIntent = new Intent(mContext, ErrorDialogActivity.class);
-                errorIntent.putExtra(ErrorDialogActivity.ERROR_MESSAGE_STRING_EXTRA,
-                        disconnectCause.getDescription());
-                errorIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                mContext.startActivityAsUser(errorIntent, UserHandle.CURRENT);
-            }
+    protected boolean isCallBlacklisted(Call c) {
+        final String number = c.getCallerInfo().phoneNumber;
+        // See if the number is in the blacklist
+        // Result is one of: MATCH_NONE, MATCH_LIST or MATCH_REGEX
+        int listType = BlacklistUtils.isListed(mContext, number, BlacklistUtils.BLOCK_CALLS);
+        if (listType != BlacklistUtils.MATCH_NONE) {
+            // We have a match, set the user and hang up the call and notify
+            Log.d(this, "Incoming call from " + number + " blocked.");
+            mBlacklistCallNotifier.notifyBlacklistedCall(number,
+                    c.getCreationTimeMillis(), listType);
+            return true;
         }
+        return false;
     }
 }
-
