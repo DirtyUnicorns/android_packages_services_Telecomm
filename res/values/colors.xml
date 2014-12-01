@@ -15,6 +15,16 @@
   -->
 
 <resources>
+
     <color name="theme_color">#0288d1</color>
-    <color name="dialtacts_secondary_text_color">#737373</color>
+    <color name="theme_color_dark">#0277bd</color>
+    <color name="settings_primary_text_color">#333333</color>
+    <color name="settings_secondary_text_color">#737373</color>
+    <color name="setting_background_color">#ffffff</color>
+    <!-- Color for icons in the actionbar -->
+    <color name="actionbar_icon_color">#ffffff</color>
+    <!-- Color of action bar text. Ensure this stays in sync with packages/Telephony
+    phone_settings_actionbar_text_color-->
+    <color name="actionbar_text_color">#ffffff</color>
+    <color name="actionbar_background_color">@color/theme_color</color>
 </resources>

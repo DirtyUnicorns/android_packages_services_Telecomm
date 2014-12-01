@@ -195,6 +195,7 @@
 
         <activity android:name=".RespondViaSmsSettings$Settings"
                   android:label="@string/respond_via_sms_setting_title"
+                  android:theme="@style/SettingsStyle"
                   android:configChanges="orientation|screenSize|keyboardHidden"
                   android:process=":ui">
             <intent-filter>

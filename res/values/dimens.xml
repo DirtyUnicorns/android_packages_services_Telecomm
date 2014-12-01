@@ -18,4 +18,8 @@
     <!-- Dimension used to possibly down-scale high-res photo into what is suitable
          for notification's large icon. -->
     <dimen name="notification_icon_size">64dp</dimen>
+
+    <dimen name="action_bar_height">56dp</dimen>
+    <dimen name="actionbar_contentInsetStart">72dp</dimen>
+    <dimen name="action_bar_elevation">2dp</dimen>
 </resources>
