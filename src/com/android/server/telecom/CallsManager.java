@@ -1134,11 +1134,16 @@ public class CallsManager extends Call.ListenerBase
             extras = new Bundle(extras);
             extras.putParcelableList(android.telecom.Call.AVAILABLE_PHONE_ACCOUNTS, accounts);
         } else {
+            PhoneAccount accountToUse =
+                    mPhoneAccountRegistrar.getPhoneAccount(phoneAccountHandle, initiatingUser);
+            if (accountToUse != null) {
+                call.setIsVoipAudioMode(accountToUse.getExtras()
+                        .getBoolean(PhoneAccount.EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE));
+            }
+
             call.setState(
                     CallState.CONNECTING,
                     phoneAccountHandle == null ? "no-handle" : phoneAccountHandle.toString());
-            PhoneAccount accountToUse =
-                    mPhoneAccountRegistrar.getPhoneAccount(phoneAccountHandle, initiatingUser);
             if (extras != null
                     && extras.getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
                 if (accountToUse != null
@@ -1654,11 +1659,14 @@ public class CallsManager extends Call.ListenerBase
             Log.i(this, "Attempted to add account to unknown call %s", call);
         } else {
             call.setTargetPhoneAccount(account);
-
+            PhoneAccount realPhoneAccount =
+                    mPhoneAccountRegistrar.getPhoneAccountUnchecked(account);
+            if (realPhoneAccount != null) {
+                call.setIsVoipAudioMode(realPhoneAccount.getExtras()
+                        .getBoolean(PhoneAccount.EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE));
+            }
             if (call.getIntentExtras()
                     .getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
-                PhoneAccount realPhoneAccount =
-                        mPhoneAccountRegistrar.getPhoneAccountUnchecked(account);
                 if (realPhoneAccount != null
                         && realPhoneAccount.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
                     call.setRttStreams(true);
