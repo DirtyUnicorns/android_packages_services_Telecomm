@@ -40,8 +40,13 @@ import android.telecom.DisconnectCause;
 import android.telecom.PhoneAccount;
 import android.telephony.PhoneNumberUtils;
 import android.text.BidiFormatter;
+import android.text.SpannableStringBuilder;
 import android.text.TextDirectionHeuristics;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
+import android.text.style.RelativeSizeSpan;
+
+import java.util.ArrayList;
 
 // TODO: Needed for move to system service: import com.android.internal.R;
 
@@ -142,14 +147,22 @@ class MissedCallNotifier extends CallsManagerListenerBase {
 
         // Create the notification.
         Notification.Builder builder = new Notification.Builder(mContext);
-        builder.setSmallIcon(android.R.drawable.stat_notify_missed_call)
+        if (Settings.System.getInt(mContext.getContentResolver(),
+               Settings.System.KEY_MISSED_CALL_BREATH, 0) == 1) {
+             builder.setSmallIcon(R.drawable.stat_notify_missed_call_breath)
                 .setColor(mContext.getResources().getColor(R.color.theme_color))
                 .setWhen(call.getCreationTimeMillis())
-                .setContentTitle(mContext.getText(titleResId))
-                .setContentText(expandedText)
                 .setContentIntent(createCallLogPendingIntent())
                 .setAutoCancel(true)
                 .setDeleteIntent(createClearMissedCallsPendingIntent());
+             } else {
+             builder.setSmallIcon(android.R.drawable.stat_notify_missed_call)
+                .setColor(mContext.getResources().getColor(R.color.theme_color))
+                .setWhen(call.getCreationTimeMillis())
+                .setContentIntent(createCallLogPendingIntent())
+                .setAutoCancel(true)
+                .setDeleteIntent(createClearMissedCallsPendingIntent());
+             }
 
         Uri handleUri = call.getHandle();
         String handle = handleUri == null ? null : handleUri.getSchemeSpecificPart();
