@@ -222,7 +222,7 @@ public final class BluetoothPhoneService extends Service {
                     try {
                         call = callsManager.getRingingCall();
                         if (call != null) {
-                            getCallsManager().answerCall(call, 0);
+                            getCallsManager().answerCall(call, call.getVideoState());
                         }
                     } finally {
                         request.setResult(call != null);
@@ -519,7 +519,7 @@ public final class BluetoothPhoneService extends Service {
             if (activeCall != null) {
                 callsManager.disconnectCall(activeCall);
                 if (ringingCall != null) {
-                    callsManager.answerCall(ringingCall, 0);
+                    callsManager.answerCall(ringingCall, ringingCall.getVideoState());
                 } else if (heldCall != null) {
                     callsManager.unholdCall(heldCall);
                 }
@@ -532,7 +532,7 @@ public final class BluetoothPhoneService extends Service {
                 updateHeadsetWithCallState(true /* force */);
                 return true;
             } else if (ringingCall != null) {
-                callsManager.answerCall(ringingCall, 0);
+                callsManager.answerCall(ringingCall, ringingCall.getVideoState());
                 return true;
             } else if (heldCall != null) {
                 // CallsManager will hold any active calls when unhold() is called on a
