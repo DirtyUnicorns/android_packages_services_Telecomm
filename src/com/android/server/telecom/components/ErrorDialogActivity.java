@@ -35,6 +35,7 @@ public class ErrorDialogActivity extends Activity {
 
     public static final String SHOW_MISSING_VOICEMAIL_NO_DIALOG_EXTRA = "show_missing_voicemail";
     public static final String ERROR_MESSAGE_ID_EXTRA = "error_message_id";
+    public static final String ERROR_MESSAGE_STRING_EXTRA = "error_message_string";
 
     /**
      * Intent action to bring up Voicemail Provider settings.
@@ -50,6 +51,10 @@ public class ErrorDialogActivity extends Activity {
 
         if (showVoicemailDialog) {
             showMissingVoicemailErrorDialog();
+        }  else if (getIntent().getCharSequenceExtra(ERROR_MESSAGE_STRING_EXTRA) != null) {
+            final CharSequence error = getIntent().getCharSequenceExtra(
+                    ERROR_MESSAGE_STRING_EXTRA);
+            showGenericErrorDialog(error);
         } else {
             final int error = getIntent().getIntExtra(ERROR_MESSAGE_ID_EXTRA, -1);
             if (error == -1) {
@@ -59,6 +64,31 @@ public class ErrorDialogActivity extends Activity {
                 showGenericErrorDialog(error);
             }
         }
+    }
+
+    private void showGenericErrorDialog(CharSequence msg) {
+        final DialogInterface.OnClickListener clickListener;
+        final DialogInterface.OnCancelListener cancelListener;
+
+        clickListener = new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                finish();
+            }
+        };
+
+        cancelListener = new DialogInterface.OnCancelListener() {
+            @Override
+            public void onCancel(DialogInterface dialog) {
+                finish();
+            }
+        };
+
+        final AlertDialog errorDialog = new AlertDialog.Builder(this)
+                .setMessage(msg).setPositiveButton(android.R.string.ok, clickListener)
+                        .setOnCancelListener(cancelListener).create();
+
+        errorDialog.show();
     }
 
     private void showGenericErrorDialog(int resid) {
