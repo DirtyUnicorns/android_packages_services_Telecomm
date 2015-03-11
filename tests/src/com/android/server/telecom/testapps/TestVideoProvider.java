@@ -169,9 +169,9 @@ public class TestVideoProvider extends Connection.VideoProvider {
      * Randomly reports data usage of value ranging from 10MB to 60MB.
      */
     @Override
-    public void onRequestCallDataUsage() {
-        log("Requested call data usage");
-        long dataUsageKb = (10 *1024) + random.nextInt(50 * 1024);
+    public void onRequestConnectionDataUsage() {
+        log("Requested connection data usage");
+        int dataUsageKb = (10 *1024) + random.nextInt(50 * 1024);
         changeCallDataUsage(dataUsageKb);
     }
 

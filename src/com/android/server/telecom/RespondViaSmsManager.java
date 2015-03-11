@@ -111,7 +111,8 @@ public class RespondViaSmsManager extends CallsManagerListenerBase {
                 QuickResponseUtils.maybeMigrateLegacyQuickResponses(context);
 
                 final SharedPreferences prefs = context.getSharedPreferences(
-                        QuickResponseUtils.SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE);
+                        QuickResponseUtils.SHARED_PREFERENCES_NAME,
+                        Context.MODE_PRIVATE | Context.MODE_MULTI_PROCESS);
                 final Resources res = context.getResources();
 
                 final ArrayList<String> textMessages = new ArrayList<>(
@@ -151,7 +152,13 @@ public class RespondViaSmsManager extends CallsManagerListenerBase {
                     Log.e(RespondViaSmsManager.this, e , "Exception e ");
                 }
             }
+        }
 
+        if (rejectWithMessage && call.getHandle() != null) {
+            PhoneAccountRegistrar phoneAccountRegistrar =
+                    CallsManager.getInstance().getPhoneAccountRegistrar();
+            int subId = phoneAccountRegistrar.getSubscriptionIdForPhoneAccount(
+                    call.getTargetPhoneAccount());
             rejectCallWithMessage(call.getContext(), call.getHandle().getSchemeSpecificPart(),
                     textMessage, subId);
         }
@@ -187,7 +194,7 @@ public class RespondViaSmsManager extends CallsManagerListenerBase {
      * Reject the call with the specified message. If message is null this call is ignored.
      */
     private void rejectCallWithMessage(Context context, String phoneNumber, String textMessage,
-            long subId) {
+            int subId) {
         if (textMessage != null) {
             final ComponentName component =
                     SmsApplication.getDefaultRespondViaMessageApplication(context,
@@ -197,7 +204,9 @@ public class RespondViaSmsManager extends CallsManagerListenerBase {
                 final Uri uri = Uri.fromParts(Constants.SCHEME_SMSTO, phoneNumber, null);
                 final Intent intent = new Intent(TelephonyManager.ACTION_RESPOND_VIA_MESSAGE, uri);
                 intent.putExtra(Intent.EXTRA_TEXT, textMessage);
-                intent.putExtra(PhoneConstants.SUBSCRIPTION_KEY, subId);
+                if (SubscriptionManager.isValidSubscriptionId(subId)) {
+                    intent.putExtra(PhoneConstants.SUBSCRIPTION_KEY, subId);
+                }
 
                 SomeArgs args = SomeArgs.obtain();
                 args.arg1 = phoneNumber;
