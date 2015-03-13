@@ -52,7 +52,7 @@ public class TestManagedVideoProvider extends Connection.VideoProvider {
         }
 
         @Override
-        public void onCallDataUsageChanged(RemoteConnection.VideoProvider rvp, long dataUsage) {
+        public void onCallDataUsageChanged(RemoteConnection.VideoProvider rvp, int dataUsage) {
             super.onCallDataUsageChanged(rvp, dataUsage);
         }
 
@@ -111,7 +111,7 @@ public class TestManagedVideoProvider extends Connection.VideoProvider {
     }
 
     @Override
-    public void onRequestCallDataUsage() {
+    public void onRequestConnectionDataUsage() {
         mRemoteVideoProvider.requestCallDataUsage();
     }
 
