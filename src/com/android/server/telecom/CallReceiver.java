@@ -55,6 +55,10 @@ public class CallReceiver extends BroadcastReceiver {
         String uriString = handle.getSchemeSpecificPart();
 
         if (!PhoneAccount.SCHEME_VOICEMAIL.equals(scheme)) {
+            if ("content".equals(scheme)) {
+                uriString = PhoneNumberUtils.getNumberFromIntent(intent, context
+                        .getApplicationContext());
+            }
             handle = Uri.fromParts(PhoneNumberUtils.isUriNumber(uriString) ?
                     PhoneAccount.SCHEME_SIP : PhoneAccount.SCHEME_TEL, uriString, null);
         }
