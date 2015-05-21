@@ -63,7 +63,6 @@ final class TtyManager implements WiredHeadsetManager.Listener {
 
     boolean isTtySupported() {
         boolean isEnabled = mContext.getResources().getBoolean(R.bool.tty_enabled);
-        Log.v(this, "isTtySupported: %b", isEnabled);
         return isEnabled;
     }
 
@@ -73,10 +72,9 @@ final class TtyManager implements WiredHeadsetManager.Listener {
 
     @Override
     public void onWiredHeadsetPluggedInChanged(boolean oldIsPluggedIn, boolean newIsPluggedIn) {
-        Log.v(this, "onWiredHeadsetPluggedInChanged");
-        updateCurrentTtyMode();
 
-        if (newIsPluggedIn) {
+        if (Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.HEADSET_PLUGGED_IN, 0) == 1) {
             showHeadSetPlugin();
         } else {
             cancelHeadSetPlugin();
@@ -88,7 +86,6 @@ final class TtyManager implements WiredHeadsetManager.Listener {
         if (isTtySupported() && mWiredHeadsetManager.isPluggedIn()) {
             newTtyMode = mPreferredTtyMode;
         }
-        Log.v(this, "updateCurrentTtyMode, %d -> %d", mCurrentTtyMode, newTtyMode);
 
         if (mCurrentTtyMode != newTtyMode) {
             mCurrentTtyMode = newTtyMode;
@@ -117,14 +114,12 @@ final class TtyManager implements WiredHeadsetManager.Listener {
                 audioTtyMode = "tty_off";
                 break;
         }
-        Log.v(this, "updateAudioTtyMode, %s", audioTtyMode);
 
         AudioManager audioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
         audioManager.setParameters("tty_mode=" + audioTtyMode);
     }
 
     void showHeadSetPlugin() {
-        Log.v(TtyManager.this, "showHeadSetPlugin()...");
 
         String titleText = mContext.getString(
                 R.string.headset_plugin_view_title);
@@ -133,7 +128,6 @@ final class TtyManager implements WiredHeadsetManager.Listener {
 
         Notification notification = new Notification();
         notification.icon = android.R.drawable.stat_sys_headset;
-        notification.flags |= Notification.FLAG_NO_CLEAR;
         notification.tickerText = titleText;
 
         // create the target network operators settings intent
@@ -146,7 +140,6 @@ final class TtyManager implements WiredHeadsetManager.Listener {
     }
 
     void cancelHeadSetPlugin() {
-        Log.v(TtyManager.this, "cancelHeadSetPlugin()...");
         mNotificationManager.cancel(HEADSET_PLUGIN_NOTIFICATION);
     }
 
@@ -154,7 +147,6 @@ final class TtyManager implements WiredHeadsetManager.Listener {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            Log.v(TtyManager.this, "onReceive, action: %s", action);
             if (action.equals(TelecomManager.ACTION_TTY_PREFERRED_MODE_CHANGED)) {
                 int newPreferredTtyMode = intent.getIntExtra(
                         TelecomManager.EXTRA_TTY_PREFERRED_MODE, TelecomManager.TTY_MODE_OFF);
