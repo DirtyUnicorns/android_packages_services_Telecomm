@@ -1509,6 +1509,11 @@ public final class CallsManager extends Call.ListenerBase {
                     newForegroundCall = call;
                     break;
                 }
+                // After active calls dialing calls will have priority
+                if (call.getState() == CallState.DIALING) {
+                    newForegroundCall = call;
+                    break;
+                }
 
                 if (call.isAlive() || call.getState() == CallState.RINGING) {
                     newForegroundCall = call;
