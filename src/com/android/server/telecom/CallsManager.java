@@ -574,6 +574,14 @@ public final class CallsManager extends Call.ListenerBase {
             call.setState(CallState.CONNECTING);
         }
 
+        if (extras != null) {
+            final int videoState = extras.getInt(
+                    TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE);
+            call.setVideoState(videoState);
+        } else {
+            call.setVideoState(VideoProfile.VideoState.AUDIO_ONLY);
+        }
+
         call.setExtras(extras);
 
         // Do not add the call if it is a potential MMI code.

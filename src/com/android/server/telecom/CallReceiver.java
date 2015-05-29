@@ -10,6 +10,7 @@ import android.os.UserHandle;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
+import android.telecom.VideoProfile;
 import android.telephony.DisconnectCause;
 import android.telephony.PhoneNumberUtils;
 
@@ -92,6 +93,11 @@ public class CallReceiver extends BroadcastReceiver {
         if (clientExtras == null) {
             clientExtras = new Bundle();
         }
+
+        final int videoState = intent.getIntExtra(
+                TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE,
+                VideoProfile.VideoState.AUDIO_ONLY);
+        clientExtras.putInt(TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE, videoState);
 
         final boolean isDefaultDialer = intent.getBooleanExtra(KEY_IS_DEFAULT_DIALER, false);
 
