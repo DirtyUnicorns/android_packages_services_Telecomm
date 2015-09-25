@@ -565,9 +565,7 @@ public final class InCallController extends CallsManagerListenerBase {
         mDefaultDialerAdapter = defaultDialerAdapter;
 
         Resources resources = mContext.getResources();
-        mSystemInCallComponentName = new ComponentName(
-                resources.getString(R.string.ui_default_package),
-                resources.getString(R.string.incall_default_class));
+        mSystemInCallComponentName = TelephonyUtil.getInCallComponentName(context);
 
         mSystemStateProvider.addListener(mSystemStateListener);
     }
