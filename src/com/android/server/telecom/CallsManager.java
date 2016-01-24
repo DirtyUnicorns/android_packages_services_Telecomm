@@ -1343,7 +1343,6 @@ public class CallsManager extends Call.ListenerBase implements VideoProviderProx
             // TODO: Define expected state transitions here, and log when an
             // unexpected transition occurs.
             call.setState(newState, tag);
-            maybeShowErrorDialogOnDisconnect(call);
 
             Trace.beginSection("onCallStateChanged");
             // Only broadcast state change for calls that are being tracked.
