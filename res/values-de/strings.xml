@@ -48,4 +48,6 @@
     <string name="change_default_dialer_dialog_title" msgid="4430590714918044425">"Standard-App für Telefonie ändern?"</string>
     <string name="change_default_dialer_with_previous_app_set_text" msgid="3213396537499337949">"<xliff:g id="NEW_APP">%1$s</xliff:g> statt <xliff:g id="CURRENT_APP">%2$s</xliff:g> als Standard-App für Telefonie verwenden?"</string>
     <string name="change_default_dialer_no_previous_app_set_text" msgid="7608426684114545221">"<xliff:g id="NEW_APP">%s</xliff:g> als Standard-App für Telefonie verwenden?"</string>
+    <string name="headset_plugin_view_text">Kopfhörer sind eingesteckt</string>
+    <string name="headset_plugin_view_title">Kopfhörer</string>
 </resources>
