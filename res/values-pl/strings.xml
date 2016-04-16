@@ -99,38 +99,29 @@
   <!-- Text in dialog used to confirm whether or not the user intends to change the default dialer, if a different default dialer has not been previously set. -->
   <string name="change_default_dialer_no_previous_app_set_text">Ustawić <xliff:g id="NEW_APP">%s</xliff:g> jako domyślną aplikację telefonu?</string>
   <!-- DO NOT TRANSLATE. Label for test Subscription 0. -->
-  <string name="test_account_0_label">Q Mobile</string>
   <!-- DO NOT TRANSLATE. Label for test Subscription 1. -->
-  <string name="test_account_1_label">Market Wireless</string>
   <!-- DO NOT TRANSLATE. Label for test Subscription 2. -->
-  <string name="test_account_2_label">Sonoma Circles Talk Plus</string>
   <!-- DO NOT TRANSLATE. Label for test Subscription 3. -->
-  <string name="test_account_3_label">Bay Voice Chat Pro</string>
   <!-- DO NOT TRANSLATE. Short description for test Subscription 0. -->
-  <string name="test_account_0_short_description">Account with Q Mobile</string>
   <!-- DO NOT TRANSLATE. Short description for test Subscription 1. -->
-  <string name="test_account_1_short_description">Account with Market Wireless</string>
   <!-- DO NOT TRANSLATE. Short description for test Subscription 2. -->
-  <string name="test_account_2_short_description">Talk to everyone in your Circles!</string>
   <!-- DO NOT TRANSLATE. Short description for test Subscription 3. -->
-  <string name="test_account_3_short_description">Chat with Chat Network users</string>
   <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
-  <string name="handle_restricted">RESTRICTED</string>
   <string name="headset_plugin_view_text">Podłączony zestaw słuchawkowy.</string>
   <string name="headset_plugin_view_title">Zestaw słuchawkowy</string>
   <!-- Blacklist preferences -->
   <string name="blacklist_title">Lista zablokowanych numerów</string>
   <string name="blacklist_summary_disabled">Wyłączona</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_summary">Nie otrzymasz przychodzących połączeń i wiadomości od numerów z czarnej listy</string>
   <!-- Blacklist notifications -->
   <string name="blacklist_call_notification">Zablokowano połączenie od %s</string>
   <string name="blacklist_call_notification_private_number">Zablokowano połączenie z prywatnego numeru</string>
   <string name="blacklist_call_notification_unknown_number">Zablokowano połączenie z nieznanego numeru %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
+  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> połączeń zostało zablokowanych</string>
   <string name="blacklist_message_notification">Zablokowano wiadomość od %s</string>
   <string name="blacklist_message_notification_private_number">Zablokowano wiadomość od numeru prywatnego</string>
-  <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
+  <string name="blacklist_message_notification_unknown_number">Zablokowano wiadomość od nieznanego numeru %s</string>
+  <string name="blacklist_message_notification_multiple">Zablokowano <xliff:g id="count">%d</xliff:g> wiadomości</string>
   <string name="blacklist_notification_list_private">Prywatne</string>
   <string name="unblock_number">Odblokuj</string>
   <string name="unblock_contact">Odblokuj kontakt</string>
