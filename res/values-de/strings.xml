@@ -110,19 +110,19 @@
   <string name="headset_plugin_view_text">Kopfhörer sind eingesteckt</string>
   <string name="headset_plugin_view_title">Kopfhörer</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Blocked caller list</string>
-  <string name="blacklist_summary_disabled">Disabled</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_title">Blockierte Anruferliste</string>
+  <string name="blacklist_summary_disabled">Deaktiviert</string>
+  <string name="blacklist_summary">Sie werden keine Anrufe oder Nachrichten von Telefonnummern auf der Blockierliste empfangen</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
-  <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
-  <string name="blacklist_message_notification">Blocked a message from %s</string>
-  <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
-  <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_call_notification">Ein Anruf von %s wurde abgewiesen</string>
+  <string name="blacklist_call_notification_private_number">Ein Anruf mit unterdrückter Nummer wurde abgewiesen</string>
+  <string name="blacklist_call_notification_unknown_number">Ein Anruf mit unbekannter Nummer %s wurde abgewiesen</string>
+  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> Anrufe wurden abgewiesen</string>
+  <string name="blacklist_message_notification">Eine Nachricht von %s wurde abgewiesen</string>
+  <string name="blacklist_message_notification_private_number">Eine Nachricht mit unterdrückter Nummer wurde abgewiesen</string>
+  <string name="blacklist_message_notification_unknown_number">Eine Nachricht von unbekannter Nummer %s wurde abgewiesen</string>
+  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> Nachrichten wurden blockiert</string>
+  <string name="blacklist_notification_list_private">Unterdrückte Nummer</string>
+  <string name="unblock_number">Sperre aufheben</string>
+  <string name="unblock_contact">Kontakt entsperren</string>
 </resources>
