@@ -110,19 +110,19 @@
   <string name="headset_plugin_view_text">耳机已插入到手机。</string>
   <string name="headset_plugin_view_title">耳机插入</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Blocked caller list</string>
-  <string name="blacklist_summary_disabled">Disabled</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_title">呼叫黑名单列表</string>
+  <string name="blacklist_summary_disabled">未启用</string>
+  <string name="blacklist_summary">您将不会收到来自呼叫黑名单列表中的来电或短信</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
-  <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
-  <string name="blacklist_message_notification">Blocked a message from %s</string>
-  <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
-  <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_call_notification">阻止了 %s 的来电</string>
+  <string name="blacklist_call_notification_private_number">阻挡了一个私人号码的来电</string>
+  <string name="blacklist_call_notification_unknown_number">阻止了未知号码 %s 的来电</string>
+  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> 个来电被阻挡</string>
+  <string name="blacklist_message_notification">阻止来自 %s 的信息</string>
+  <string name="blacklist_message_notification_private_number">阻止来自于私人号码的信息</string>
+  <string name="blacklist_message_notification_unknown_number">阻止了来自未知号码 %s 的信息</string>
+  <string name="blacklist_message_notification_multiple">已阻止<xliff:g id="count">%d</xliff:g> 条信息</string>
+  <string name="blacklist_notification_list_private">私人号码</string>
+  <string name="unblock_number">取消阻止</string>
+  <string name="unblock_contact">取消屏蔽联系人</string>
 </resources>

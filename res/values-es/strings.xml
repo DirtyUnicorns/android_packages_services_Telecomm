@@ -107,15 +107,15 @@
   <!-- DO NOT TRANSLATE. Short description for test Subscription 2. -->
   <!-- DO NOT TRANSLATE. Short description for test Subscription 3. -->
   <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
-  <string name="headset_plugin_view_text">Headset is plugged in.</string>
-  <string name="headset_plugin_view_title">Headset</string>
+  <string name="headset_plugin_view_text">El auricular está conectado.</string>
+  <string name="headset_plugin_view_title">Auriculares</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Blocked caller list</string>
-  <string name="blacklist_summary_disabled">Disabled</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_title">Lista de llamadas bloqueadas</string>
+  <string name="blacklist_summary_disabled">Deshabilitado</string>
+  <string name="blacklist_summary">No recibirá llamadas o mensajes de los números de teléfono que están en la lista de llamadas bloqueadas</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
+  <string name="blacklist_call_notification">Llamada de %s, bloqueada</string>
+  <string name="blacklist_call_notification_private_number">Llamada de número oculto bloqueada</string>
   <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
   <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
   <string name="blacklist_message_notification">Blocked a message from %s</string>

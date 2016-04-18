@@ -108,21 +108,21 @@
   <!-- DO NOT TRANSLATE. Short description for test Subscription 3. -->
   <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
   <string name="headset_plugin_view_text">Гарнитура подключена.</string>
-  <string name="headset_plugin_view_title">Headset</string>
+  <string name="headset_plugin_view_title">Гарнитура</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Blocked caller list</string>
-  <string name="blacklist_summary_disabled">Disabled</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_title">Список заблокированных абонентов</string>
+  <string name="blacklist_summary_disabled">Отключен</string>
+  <string name="blacklist_summary">Никакие звонки или сообщения не будут получены от номеров, указанных в \"черном\" списке</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
-  <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
-  <string name="blacklist_message_notification">Blocked a message from %s</string>
-  <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
-  <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_call_notification">Блокирован вызов от</string>
+  <string name="blacklist_call_notification_private_number">Блокирован вызов от скрытого номера</string>
+  <string name="blacklist_call_notification_unknown_number">Блокирован вызов с неизвестного номера</string>
+  <string name="blacklist_call_notification_multiple">звонков заблокировано</string>
+  <string name="blacklist_message_notification">Блокировано сообщение от</string>
+  <string name="blacklist_message_notification_private_number">Блокировано сообщение со скрытого номера</string>
+  <string name="blacklist_message_notification_unknown_number">Блокировано сообщение от неизвестного номера</string>
+  <string name="blacklist_message_notification_multiple">сообщений блокировано</string>
+  <string name="blacklist_notification_list_private">Скрытый</string>
+  <string name="unblock_number">Разблокировать</string>
+  <string name="unblock_contact">Разблокировать контакт</string>
 </resources>
