@@ -110,19 +110,19 @@
   <string name="headset_plugin_view_text">Headset is plugged in.</string>
   <string name="headset_plugin_view_title">Headset</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Blocked caller list</string>
-  <string name="blacklist_summary_disabled">Disabled</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_title">Engellenen arayan listesi</string>
+  <string name="blacklist_summary_disabled">Devre Dışı</string>
+  <string name="blacklist_summary">Engellenen arayan listesindeki telefon numaralarından gelen arama veya mesajı almazsınız</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
+  <string name="blacklist_call_notification">%s \'den gelen bir çağrı engellendi</string>
   <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
   <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
   <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
   <string name="blacklist_message_notification">Blocked a message from %s</string>
   <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
-  <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_message_notification_unknown_number">Bilinmeyen bir numaradan \'%s\' gelen bir mesaj engellendi</string>
+  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> mesaj engellendi</string>
+  <string name="blacklist_notification_list_private">Özel</string>
+  <string name="unblock_number">Engeli kaldır</string>
+  <string name="unblock_contact">Kişinin engelini kaldır</string>
 </resources>
