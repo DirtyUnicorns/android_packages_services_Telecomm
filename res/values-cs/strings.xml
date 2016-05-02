@@ -107,22 +107,22 @@
   <!-- DO NOT TRANSLATE. Short description for test Subscription 2. -->
   <!-- DO NOT TRANSLATE. Short description for test Subscription 3. -->
   <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
-  <string name="headset_plugin_view_text">Headset is plugged in.</string>
-  <string name="headset_plugin_view_title">Headset</string>
+  <string name="headset_plugin_view_text">Zapojena sluchátka.</string>
+  <string name="headset_plugin_view_title">Sluchátka</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Blocked caller list</string>
-  <string name="blacklist_summary_disabled">Disabled</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_title">Seznam blokovaných čísel</string>
+  <string name="blacklist_summary_disabled">Deaktivováno</string>
+  <string name="blacklist_summary">Nebude přijímat příchozí hovory nebo zprávy od telefonní čísla na seznamu blokovaných</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
-  <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
-  <string name="blacklist_message_notification">Blocked a message from %s</string>
-  <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
-  <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_call_notification">Blokovaný hovor z %s</string>
+  <string name="blacklist_call_notification_private_number">Blokovaný hovor ze skrytého čísla</string>
+  <string name="blacklist_call_notification_unknown_number">Blokovaný hovor z neznámého čísla %s</string>
+  <string name="blacklist_call_notification_multiple">Počet zablokovaných hovorů: <xliff:g id="count">%d</xliff:g></string>
+  <string name="blacklist_message_notification">Blokovaná zpráva z čísla %s</string>
+  <string name="blacklist_message_notification_private_number">Blokovaná zpráva ze skrytého čísla</string>
+  <string name="blacklist_message_notification_unknown_number">Blokovaná zpráva z neznámého čísla %s</string>
+  <string name="blacklist_message_notification_multiple">Bylo zablokováno <xliff:g id="count">%d</xliff:g> zpráv</string>
+  <string name="blacklist_notification_list_private">Skryté</string>
+  <string name="unblock_number">Odblokovat</string>
+  <string name="unblock_contact">Odblokovat kontakt</string>
 </resources>
