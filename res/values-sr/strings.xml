@@ -107,22 +107,22 @@
   <!-- DO NOT TRANSLATE. Short description for test Subscription 2. -->
   <!-- DO NOT TRANSLATE. Short description for test Subscription 3. -->
   <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
-  <string name="headset_plugin_view_text">Headset is plugged in.</string>
-  <string name="headset_plugin_view_title">Headset</string>
+  <string name="headset_plugin_view_text">Слушалице су утакнуте.</string>
+  <string name="headset_plugin_view_title">Слушалице</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Blocked caller list</string>
-  <string name="blacklist_summary_disabled">Disabled</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_title">Листа блокираних позиваоца</string>
+  <string name="blacklist_summary_disabled">Онемогућено</string>
+  <string name="blacklist_summary">Нећете добијати долазне позиве и поруке од тел. бројева са листе блокираних бројева</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
-  <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
-  <string name="blacklist_message_notification">Blocked a message from %s</string>
-  <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
-  <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_call_notification">Блокирај позив од %s</string>
+  <string name="blacklist_call_notification_private_number">Блокиран позив са приватног броја</string>
+  <string name="blacklist_call_notification_unknown_number">Блокиран позив са непознатог броја %s</string>
+  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> позиви су блокирани</string>
+  <string name="blacklist_message_notification">Блокирана порука од %s</string>
+  <string name="blacklist_message_notification_private_number">Блокирана порука са приватног броја</string>
+  <string name="blacklist_message_notification_unknown_number">Блокирана порука са непознатог броја %s</string>
+  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> поруке су блокиране</string>
+  <string name="blacklist_notification_list_private">Приватно</string>
+  <string name="unblock_number">Одблокирај</string>
+  <string name="unblock_contact">Одблокирај контакт</string>
 </resources>

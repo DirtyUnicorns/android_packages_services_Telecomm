@@ -107,22 +107,22 @@
   <!-- DO NOT TRANSLATE. Short description for test Subscription 2. -->
   <!-- DO NOT TRANSLATE. Short description for test Subscription 3. -->
   <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
-  <string name="headset_plugin_view_text">Headset is plugged in.</string>
-  <string name="headset_plugin_view_title">Headset</string>
+  <string name="headset_plugin_view_text">سماعات الأذن متصلة.</string>
+  <string name="headset_plugin_view_title">سماعات الأذن</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Blocked caller list</string>
-  <string name="blacklist_summary_disabled">Disabled</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_title">قائمة المتصلين المحظورين</string>
+  <string name="blacklist_summary_disabled">معطل</string>
+  <string name="blacklist_summary">لن تتمكن من تلقي المكالمات و الرسائل القادمة من الأرقام الموجودة في قائمة المتصلين المحظورين</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
-  <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
-  <string name="blacklist_message_notification">Blocked a message from %s</string>
-  <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
-  <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_call_notification">تم حظر مكالمة من %s</string>
+  <string name="blacklist_call_notification_private_number">تم حظر مكالمة من رقم خاص</string>
+  <string name="blacklist_call_notification_unknown_number">تم حظر مكالمة من رقم مجهول %s</string>
+  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> مكالمة تم حظرها</string>
+  <string name="blacklist_message_notification">تم حظر رسالة من %s</string>
+  <string name="blacklist_message_notification_private_number">تم حظر رسالة من رقم خاص</string>
+  <string name="blacklist_message_notification_unknown_number">تم حظر رسالة من رقم مجهول %s</string>
+  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> رسائل تم حظرها</string>
+  <string name="blacklist_notification_list_private">خاص</string>
+  <string name="unblock_number">إلغاء الحظر</string>
+  <string name="unblock_contact">إلغاء حظر جهة الإتصال</string>
 </resources>
