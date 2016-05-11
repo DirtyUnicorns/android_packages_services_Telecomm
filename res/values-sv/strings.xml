@@ -112,17 +112,17 @@
   <!-- Blacklist preferences -->
   <string name="blacklist_title">Blockerade ringare</string>
   <string name="blacklist_summary_disabled">Inaktiverad</string>
-  <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
+  <string name="blacklist_summary">Du kommer inte få inkommande samtal eller meddelanden från telefonnummer i listan över blockerade telefonnummer</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
-  <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
-  <string name="blacklist_message_notification">Blocked a message from %s</string>
-  <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
-  <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_call_notification">Blockerade ett samtal från %s</string>
+  <string name="blacklist_call_notification_private_number">Blockerade ett samtal från ett hemligt nummer</string>
+  <string name="blacklist_call_notification_unknown_number">Blockerade ett samtal från okänt nummer %s</string>
+  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> samtal blockerades</string>
+  <string name="blacklist_message_notification">Blockerade ett meddelande från %s</string>
+  <string name="blacklist_message_notification_private_number">Blockerade ett meddelande från hemligt nummer</string>
+  <string name="blacklist_message_notification_unknown_number">Blockerade ett meddelande från ett okänt nummer %s</string>
+  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> meddelanden har blockerats</string>
+  <string name="blacklist_notification_list_private">Hemligt</string>
+  <string name="unblock_number">Avblockera</string>
+  <string name="unblock_contact">Avblockera kontakt</string>
 </resources>

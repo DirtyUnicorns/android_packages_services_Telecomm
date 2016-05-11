@@ -47,9 +47,9 @@
   <string name="accessibility_call_muted">Chamada silenciada.</string>
   <!-- Content description of the speakerphone enabled notification icon for
          accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
-  <string name="accessibility_speakerphone_enabled">Speakerphone enabled.</string>
+  <string name="accessibility_speakerphone_enabled">Viva-voz ativado.</string>
   <!-- Canned response for the "Respond via SMS" feature for incoming calls. [CHAR LIMIT=35] -->
-  <string name="respond_via_sms_canned_response_1">Can\'t talk now. What\'s up?</string>
+  <string name="respond_via_sms_canned_response_1">Não posso falar agora. O que está havendo?</string>
   <!-- Canned response for the "Respond via SMS" feature for incoming calls. [CHAR LIMIT=35] -->
   <string name="respond_via_sms_canned_response_2">Já te ligo de volta.</string>
   <!-- Canned response for the "Respond via SMS" feature for incoming calls. [CHAR LIMIT=35] -->
@@ -71,33 +71,33 @@
          Each method for placing a call (SIM1, SIM2, SIP account, etc) has a phone-account.
          Phone-accounts that are created by third party apps can be disabled and enabled by user.
          [CHAR LIMIT=30] -->
-  <string name="enable_account_preference_title">Calling accounts</string>
+  <string name="enable_account_preference_title">Contas do telefone</string>
   <!-- Message indicating that the user is not allowed to make non-emergency outgoing phone calls
          due to a user restriction -->
-  <string name="outgoing_call_not_allowed_user_restriction">Only emergency calls are allowed.</string>
+  <string name="outgoing_call_not_allowed_user_restriction">Somente chamadas de Emergência.</string>
   <!-- Message indicating that the user is not allowed to make non-emergency outgoing phone calls
          due to the lack of the CALL_PHONE permission -->
-  <string name="outgoing_call_not_allowed_no_permission">This application cannot make outgoing calls without the Phone permission.</string>
+  <string name="outgoing_call_not_allowed_no_permission">Esta aplicação não pode fazer chamadas sem a autorização do telefone.</string>
   <!-- Call failure message displayed in an error dialog used to indicate that a phone number was not provided -->
-  <string name="outgoing_call_error_no_phone_number_supplied">To place a call, enter a valid number.</string>
+  <string name="outgoing_call_error_no_phone_number_supplied">Para fazer uma chamada, insira um número válido.</string>
   <!-- Message shown when the user tries to make a video call when already in a video call. -->
-  <string name="duplicate_video_call_not_allowed">Call cannot be added at this time.</string>
+  <string name="duplicate_video_call_not_allowed">Não é possível adicionar a chamada neste momento.</string>
   <!-- Message indicating video calls not allowed if user enabled TTY Mode -->
-  <string name="video_call_not_allowed_if_tty_enabled">Please disable TTY Mode to make video calls.</string>
+  <string name="video_call_not_allowed_if_tty_enabled">Desative o modo TTY para efetuar videochamadas.</string>
   <!-- missing voicemail number -->
   <!-- Title of the "Missing voicemail number" dialog -->
-  <string name="no_vm_number">Missing voicemail number</string>
+  <string name="no_vm_number">Número do correio de voz ausente</string>
   <!-- Body text of the "Missing voicemail number" dialog -->
-  <string name="no_vm_number_msg">No voicemail number is stored on the SIM card.</string>
+  <string name="no_vm_number_msg">Não existe um número de correio de voz armazenado no cartão SIM.</string>
   <!-- Button label on the "Missing voicemail number" dialog -->
-  <string name="add_vm_number_str">Add number</string>
+  <string name="add_vm_number_str">Adicionar número</string>
   <!-- Title of dialog used to comfirm whether the user intends to change the default dialer
             application [CHAR LIMIT=55]-->
-  <string name="change_default_dialer_dialog_title">Change default Dialer app?</string>
+  <string name="change_default_dialer_dialog_title">Alterar aplicação de discagem predefinida?</string>
   <!-- Text in dialog used to confirm whether or not the user intends to change the default dialer, if a different default dialer has been previously set. -->
-  <string name="change_default_dialer_with_previous_app_set_text">Use <xliff:g id="new_app">%1$s</xliff:g> instead of <xliff:g id="current_app">%2$s</xliff:g> as your default dialer app?</string>
+  <string name="change_default_dialer_with_previous_app_set_text">Usar <xliff:g id="new_app">%1$s</xliff:g> no lugar de <xliff:g id="current_app">%2$s</xliff:g> como aplicativo padrão de discagem?</string>
   <!-- Text in dialog used to confirm whether or not the user intends to change the default dialer, if a different default dialer has not been previously set. -->
-  <string name="change_default_dialer_no_previous_app_set_text">Use <xliff:g id="new_app">%s</xliff:g> as your default dialer app?</string>
+  <string name="change_default_dialer_no_previous_app_set_text">Utilizar <xliff:g id="New_APP">%s</xliff:g> como a aplicação de discagem predefinida?</string>
   <!-- DO NOT TRANSLATE. Label for test Subscription 0. -->
   <!-- DO NOT TRANSLATE. Label for test Subscription 1. -->
   <!-- DO NOT TRANSLATE. Label for test Subscription 2. -->
@@ -107,7 +107,7 @@
   <!-- DO NOT TRANSLATE. Short description for test Subscription 2. -->
   <!-- DO NOT TRANSLATE. Short description for test Subscription 3. -->
   <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
-  <string name="headset_plugin_view_text">Headset is plugged in.</string>
+  <string name="headset_plugin_view_text">Fone de ouvido conectado.</string>
   <string name="headset_plugin_view_title">Headset</string>
   <!-- Blacklist preferences -->
   <string name="blacklist_title">Blocked caller list</string>
