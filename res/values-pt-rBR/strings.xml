@@ -114,15 +114,15 @@
   <string name="blacklist_summary_disabled">Disabled</string>
   <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Blocked a call from %s</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
-  <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
+  <string name="blacklist_call_notification">Uma chamada de %s foi bloqueada</string>
+  <string name="blacklist_call_notification_private_number">Uma chamada de um número privado foi bloqueada</string>
+  <string name="blacklist_call_notification_unknown_number">Chamada de um número desconhecido bloqueada %s</string>
+  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g>chamadas foram bloqueadas</string>
   <string name="blacklist_message_notification">Blocked a message from %s</string>
   <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
   <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
   <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_notification_list_private">Privado</string>
+  <string name="unblock_number">Desbloquear</string>
+  <string name="unblock_contact">Desbloquear contato</string>
 </resources>
