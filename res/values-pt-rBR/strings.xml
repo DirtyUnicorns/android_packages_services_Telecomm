@@ -110,7 +110,7 @@
   <string name="headset_plugin_view_text">Fone de ouvido conectado.</string>
   <string name="headset_plugin_view_title">Fones de ouvido</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Blocked caller list</string>
+  <string name="blacklist_title">Lista de números bloqueados</string>
   <string name="blacklist_summary_disabled">Disabled</string>
   <string name="blacklist_summary">You will not receive incoming calls or messages from phone numbers on the blocked caller list</string>
   <!-- Blacklist notifications -->
