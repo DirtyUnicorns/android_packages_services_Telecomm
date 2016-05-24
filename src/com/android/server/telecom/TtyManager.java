@@ -73,12 +73,16 @@ final class TtyManager implements WiredHeadsetManager.Listener {
     @Override
     public void onWiredHeadsetPluggedInChanged(boolean oldIsPluggedIn, boolean newIsPluggedIn) {
 
-        if (Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.HEADSET_PLUGGED_IN, 0) == 1) {
+        if (newIsPluggedIn && isHeadsetEnabled()) {
             showHeadSetPlugin();
         } else {
             cancelHeadSetPlugin();
         }
+    }
+
+    private boolean isHeadsetEnabled() {
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.HEADSET_PLUGGED_IN, 0, UserHandle.USER_CURRENT) == 1;
     }
 
     private void updateCurrentTtyMode() {
@@ -127,7 +131,8 @@ final class TtyManager implements WiredHeadsetManager.Listener {
                 R.string.headset_plugin_view_text);
 
         Notification notification = new Notification();
-        notification.icon = android.R.drawable.stat_sys_headset;
+        notification.icon = R.drawable.stat_sys_headset;
+        notification.flags |= Notification.FLAG_NO_CLEAR;
         notification.tickerText = titleText;
 
         // create the target network operators settings intent
