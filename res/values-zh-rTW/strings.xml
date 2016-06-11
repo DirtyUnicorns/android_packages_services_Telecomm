@@ -117,11 +117,11 @@
   <string name="blacklist_call_notification">已封鎖 %s 的來電</string>
   <string name="blacklist_call_notification_private_number">已封鎖私人號碼的來電</string>
   <string name="blacklist_call_notification_unknown_number">已封鎖未知號碼 %s 的來電</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> 個來電已封鎖</string>
-  <string name="blacklist_message_notification">已阻擋來自 %s 的訊息</string>
+  <string name="blacklist_call_notification_multiple">已封鎖 <xliff:g id="count">%d</xliff:g> 通來電</string>
+  <string name="blacklist_message_notification">已封鎖來自 %s 的訊息</string>
   <string name="blacklist_message_notification_private_number">已封鎖來自私人號碼的訊息</string>
   <string name="blacklist_message_notification_unknown_number">已封鎖來自未知號碼 %s 的訊息</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> 則訊息已封鎖</string>
+  <string name="blacklist_message_notification_multiple">已封鎖 <xliff:g id="count">%d</xliff:g> 則訊息</string>
   <string name="blacklist_notification_list_private">私人號碼</string>
   <string name="unblock_number">解除封鎖</string>
   <string name="unblock_contact">解除封鎖聯絡人</string>
