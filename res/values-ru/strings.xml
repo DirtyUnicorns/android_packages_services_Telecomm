@@ -110,18 +110,18 @@
   <string name="headset_plugin_view_text">Гарнитура подключена.</string>
   <string name="headset_plugin_view_title">Гарнитура</string>
   <!-- Blacklist preferences -->
-  <string name="blacklist_title">Список заблокированных абонентов</string>
+  <string name="blacklist_title">Чёрный список</string>
   <string name="blacklist_summary_disabled">Отключен</string>
   <string name="blacklist_summary">Никакие звонки или сообщения не будут получены от номеров, указанных в \"черном\" списке</string>
   <!-- Blacklist notifications -->
-  <string name="blacklist_call_notification">Блокирован вызов от</string>
+  <string name="blacklist_call_notification">Блокирован вызов от %s</string>
   <string name="blacklist_call_notification_private_number">Блокирован вызов от скрытого номера</string>
-  <string name="blacklist_call_notification_unknown_number">Блокирован вызов с неизвестного номера</string>
-  <string name="blacklist_call_notification_multiple">звонков заблокировано</string>
-  <string name="blacklist_message_notification">Блокировано сообщение от</string>
+  <string name="blacklist_call_notification_unknown_number">Блокирован вызов с неизвестного номера %s</string>
+  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> звонков заблокировано</string>
+  <string name="blacklist_message_notification">Блокировано сообщение от %s</string>
   <string name="blacklist_message_notification_private_number">Блокировано сообщение со скрытого номера</string>
-  <string name="blacklist_message_notification_unknown_number">Блокировано сообщение от неизвестного номера</string>
-  <string name="blacklist_message_notification_multiple">сообщений блокировано</string>
+  <string name="blacklist_message_notification_unknown_number">Блокировано сообщение от неизвестного номера %s</string>
+  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> сообщений блокировано</string>
   <string name="blacklist_notification_list_private">Скрытый</string>
   <string name="unblock_number">Разблокировать</string>
   <string name="unblock_contact">Разблокировать контакт</string>
