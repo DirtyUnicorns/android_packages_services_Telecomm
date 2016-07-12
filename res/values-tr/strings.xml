@@ -107,19 +107,19 @@
   <!-- DO NOT TRANSLATE. Short description for test Subscription 2. -->
   <!-- DO NOT TRANSLATE. Short description for test Subscription 3. -->
   <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
-  <string name="headset_plugin_view_text">Headset is plugged in.</string>
-  <string name="headset_plugin_view_title">Headset</string>
+  <string name="headset_plugin_view_text">Bir kulaklık takıldı.</string>
+  <string name="headset_plugin_view_title">Kulaklık</string>
   <!-- Blacklist preferences -->
   <string name="blacklist_title">Engellenen arayan listesi</string>
   <string name="blacklist_summary_disabled">Devre Dışı</string>
   <string name="blacklist_summary">Engellenen arayan listesindeki telefon numaralarından gelen arama veya mesajı almazsınız</string>
   <!-- Blacklist notifications -->
   <string name="blacklist_call_notification">%s \'den gelen bir çağrı engellendi</string>
-  <string name="blacklist_call_notification_private_number">Blocked a call from a private number</string>
-  <string name="blacklist_call_notification_unknown_number">Blocked a call from unknown number %s</string>
-  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> calls were blocked</string>
-  <string name="blacklist_message_notification">Blocked a message from %s</string>
-  <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
+  <string name="blacklist_call_notification_private_number">Özel numaradan gelen bir çağrı engellendi</string>
+  <string name="blacklist_call_notification_unknown_number">Bilinmeyen bir numaradan \'%s\' gelen bir çağrı engellendi</string>
+  <string name="blacklist_call_notification_multiple"><xliff:g id="count">%d</xliff:g> çağrı engellendi</string>
+  <string name="blacklist_message_notification">%s \'den gelen bir mesaj engellendi</string>
+  <string name="blacklist_message_notification_private_number">Özel numaradan gelen bir mesaj engellendi</string>
   <string name="blacklist_message_notification_unknown_number">Bilinmeyen bir numaradan \'%s\' gelen bir mesaj engellendi</string>
   <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> mesaj engellendi</string>
   <string name="blacklist_notification_list_private">Özel</string>

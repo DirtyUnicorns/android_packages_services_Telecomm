@@ -122,7 +122,7 @@
   <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
   <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
   <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
+  <string name="blacklist_notification_list_private">Yksityinen</string>
   <string name="unblock_number">Unblock</string>
   <string name="unblock_contact">Unblock contact</string>
 </resources>

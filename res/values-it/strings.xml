@@ -26,7 +26,7 @@
   <string name="unknown">Sconosciuto</string>
   <!-- Notification strings -->
   <!-- Missed call notification label, used when there's exactly one missed call -->
-  <string name="notification_missedCallTitle">Chiamata senza risposta</string>
+  <string name="notification_missedCallTitle">Chiamata persa</string>
   <!-- Missed call notification label, used when there are two or more missed calls -->
   <string name="notification_missedCallsTitle">Chiamate senza risposta</string>
   <!-- Missed call notification message used when there are multiple missed calls -->
