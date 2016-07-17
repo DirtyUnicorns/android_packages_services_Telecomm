@@ -107,8 +107,8 @@
   <!-- DO NOT TRANSLATE. Short description for test Subscription 2. -->
   <!-- DO NOT TRANSLATE. Short description for test Subscription 3. -->
   <!-- DO NOT TRANSLATE. Hardcoded number used for restricted incoming phone numbers. -->
-  <string name="headset_plugin_view_text">Headset is plugged in.</string>
-  <string name="headset_plugin_view_title">Headset</string>
+  <string name="headset_plugin_view_text">ヘッドセットが接続されています。</string>
+  <string name="headset_plugin_view_title">ヘッドセット</string>
   <!-- Blacklist preferences -->
   <string name="blacklist_title">Blocked caller list</string>
   <string name="blacklist_summary_disabled">Disabled</string>
@@ -121,8 +121,8 @@
   <string name="blacklist_message_notification">Blocked a message from %s</string>
   <string name="blacklist_message_notification_private_number">Blocked a message from a private number</string>
   <string name="blacklist_message_notification_unknown_number">Blocked a message from unknown number %s</string>
-  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g> messages were blocked</string>
-  <string name="blacklist_notification_list_private">Private</string>
-  <string name="unblock_number">Unblock</string>
-  <string name="unblock_contact">Unblock contact</string>
+  <string name="blacklist_message_notification_multiple"><xliff:g id="count">%d</xliff:g>通のメッセージがブロックされました</string>
+  <string name="blacklist_notification_list_private">非通知</string>
+  <string name="unblock_number">ブロック解除</string>
+  <string name="unblock_contact">連絡先のブロックを解除</string>
 </resources>
