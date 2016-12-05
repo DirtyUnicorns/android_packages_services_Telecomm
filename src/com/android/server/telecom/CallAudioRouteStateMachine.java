@@ -626,7 +626,9 @@ public class CallAudioRouteStateMachine extends StateMachine {
         @Override
         public void enter() {
             super.enter();
-            setSpeakerphoneOn(false);
+            // Just hide the speaker icon, don't close speaker to avoid
+            // Audio selects headset for a breif time with priority
+            mStatusBarNotifier.notifySpeakerphone(false);
             setBluetoothOn(true);
             CallAudioState newState = new CallAudioState(mIsMuted, ROUTE_BLUETOOTH,
                     mAvailableRoutes);
