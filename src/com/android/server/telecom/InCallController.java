@@ -48,7 +48,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telecom.IInCallService;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.telecom.SystemStateProvider.SystemStateListener;
-import com.android.server.telecom.TelecomServiceImpl.DefaultDialerManagerAdapter;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -297,6 +296,9 @@ public final class InCallController extends CallsManagerListenerBase {
                 mIsProxying = false;
             }
 
+            mEmergencyLocationHelper.maybeGrantTemporaryLocationPermission(call,
+                mCallsManager.getCurrentUserHandle());
+
             // If we are here, we didn't or could not connect to child. So lets connect ourselves.
             return super.connect(call);
         }
@@ -308,6 +310,7 @@ public final class InCallController extends CallsManagerListenerBase {
                 mSubConnection.disconnect();
             } else {
                 super.disconnect();
+                mEmergencyLocationHelper.maybeRevokeTemporaryLocationPermission();
             }
             mIsConnected = false;
         }
@@ -614,20 +617,23 @@ public final class InCallController extends CallsManagerListenerBase {
     private final TelecomSystem.SyncRoot mLock;
     private final CallsManager mCallsManager;
     private final SystemStateProvider mSystemStateProvider;
-    private final DefaultDialerManagerAdapter mDefaultDialerAdapter;
     private final Timeouts.Adapter mTimeoutsAdapter;
+    private final DefaultDialerCache mDefaultDialerCache;
+    private final EmergencyLocationHelper mEmergencyLocationHelper;
     private CarSwappingInCallServiceConnection mInCallServiceConnection;
     private NonUIInCallServiceConnectionCollection mNonUIInCallServiceConnections;
 
     public InCallController(Context context, TelecomSystem.SyncRoot lock, CallsManager callsManager,
             SystemStateProvider systemStateProvider,
-            DefaultDialerManagerAdapter defaultDialerAdapter, Timeouts.Adapter timeoutsAdapter) {
+            DefaultDialerCache defaultDialerCache, Timeouts.Adapter timeoutsAdapter,
+            EmergencyLocationHelper emergencyLocationHelper) {
         mContext = context;
         mLock = lock;
         mCallsManager = callsManager;
         mSystemStateProvider = systemStateProvider;
-        mDefaultDialerAdapter = defaultDialerAdapter;
         mTimeoutsAdapter = timeoutsAdapter;
+        mDefaultDialerCache = defaultDialerCache;
+        mEmergencyLocationHelper = emergencyLocationHelper;
 
         Resources resources = mContext.getResources();
         mSystemInCallComponentName = new ComponentName(
@@ -915,8 +921,8 @@ public final class InCallController extends CallsManagerListenerBase {
     }
 
     private InCallServiceInfo getDefaultDialerComponent() {
-        String packageName = mDefaultDialerAdapter.getDefaultDialerApplication(
-                mContext, mCallsManager.getCurrentUserHandle().getIdentifier());
+        String packageName = mDefaultDialerCache.getDefaultDialerApplication(
+                mCallsManager.getCurrentUserHandle().getIdentifier());
         Log.d(this, "Default Dialer package: " + packageName);
 
         return getInCallServiceComponent(packageName, IN_CALL_SERVICE_TYPE_DIALER_UI);
@@ -1038,8 +1044,8 @@ public final class InCallController extends CallsManagerListenerBase {
 
         // Check to see that it is the default dialer package
         boolean isDefaultDialerPackage = Objects.equals(serviceInfo.packageName,
-                mDefaultDialerAdapter.getDefaultDialerApplication(
-                    mContext, mCallsManager.getCurrentUserHandle().getIdentifier()));
+                mDefaultDialerCache.getDefaultDialerApplication(
+                    mCallsManager.getCurrentUserHandle().getIdentifier()));
         boolean isUIService = serviceInfo.metaData != null &&
                 serviceInfo.metaData.getBoolean(
                         TelecomManager.METADATA_IN_CALL_SERVICE_UI, false);

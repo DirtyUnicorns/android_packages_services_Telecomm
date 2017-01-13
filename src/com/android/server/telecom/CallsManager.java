@@ -57,7 +57,7 @@ import com.android.internal.telephony.AsyncEmergencyContactNotifier;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.util.IndentingPrintWriter;
-import com.android.server.telecom.TelecomServiceImpl.DefaultDialerManagerAdapter;
+import com.android.server.telecom.bluetooth.BluetoothRouteManager;
 import com.android.server.telecom.callfiltering.AsyncBlockCheckFilter;
 import com.android.server.telecom.callfiltering.BlockCheckerAdapter;
 import com.android.server.telecom.callfiltering.CallFilterResultCallback;
@@ -89,7 +89,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @VisibleForTesting
 public class CallsManager extends Call.ListenerBase
-        implements VideoProviderProxy.Listener, CallFilterResultCallback {
+        implements VideoProviderProxy.Listener, CallFilterResultCallback, CurrentUserProxy {
 
     // TODO: Consider renaming this CallsManagerPlugin.
     @VisibleForTesting
@@ -181,7 +181,7 @@ public class CallsManager extends Call.ListenerBase
             new ConcurrentHashMap<CallsManagerListener, Boolean>(16, 0.9f, 1));
     private final HeadsetMediaButton mHeadsetMediaButton;
     private final WiredHeadsetManager mWiredHeadsetManager;
-    private final BluetoothManager mBluetoothManager;
+    private final BluetoothRouteManager mBluetoothRouteManager;
     private final DockManager mDockManager;
     private final TtyManager mTtyManager;
     private final ProximitySensorManager mProximitySensorManager;
@@ -194,7 +194,7 @@ public class CallsManager extends Call.ListenerBase
     private final PhoneAccountRegistrar mPhoneAccountRegistrar;
     private final MissedCallNotifier mMissedCallNotifier;
     private final CallerInfoLookupHelper mCallerInfoLookupHelper;
-    private final DefaultDialerManagerAdapter mDefaultDialerManagerAdapter;
+    private final DefaultDialerCache mDefaultDialerCache;
     private final Timeouts.Adapter mTimeoutsAdapter;
     private final PhoneNumberUtilsAdapter mPhoneNumberUtilsAdapter;
     private final NotificationManager mNotificationManager;
@@ -223,14 +223,15 @@ public class CallsManager extends Call.ListenerBase
             ProximitySensorManagerFactory proximitySensorManagerFactory,
             InCallWakeLockControllerFactory inCallWakeLockControllerFactory,
             CallAudioManager.AudioServiceFactory audioServiceFactory,
-            BluetoothManager bluetoothManager,
+            BluetoothRouteManager bluetoothManager,
             WiredHeadsetManager wiredHeadsetManager,
             SystemStateProvider systemStateProvider,
-            DefaultDialerManagerAdapter defaultDialerAdapter,
+            DefaultDialerCache defaultDialerCache,
             Timeouts.Adapter timeoutsAdapter,
             AsyncRingtonePlayer asyncRingtonePlayer,
             PhoneNumberUtilsAdapter phoneNumberUtilsAdapter,
-            InterruptionFilterProxy interruptionFilterProxy) {
+            InterruptionFilterProxy interruptionFilterProxy,
+            EmergencyLocationHelper emergencyLocationHelper) {
         mContext = context;
         mLock = lock;
         mPhoneNumberUtilsAdapter = phoneNumberUtilsAdapter;
@@ -240,8 +241,8 @@ public class CallsManager extends Call.ListenerBase
         mMissedCallNotifier = missedCallNotifier;
         StatusBarNotifier statusBarNotifier = new StatusBarNotifier(context, this);
         mWiredHeadsetManager = wiredHeadsetManager;
-        mBluetoothManager = bluetoothManager;
-        mDefaultDialerManagerAdapter = defaultDialerAdapter;
+        mDefaultDialerCache = defaultDialerCache;
+        mBluetoothRouteManager = bluetoothManager;
         mDockManager = new DockManager(context);
         mTimeoutsAdapter = timeoutsAdapter;
         mCallerInfoLookupHelper = new CallerInfoLookupHelper(context, mCallerInfoAsyncQueryFactory,
@@ -276,7 +277,8 @@ public class CallsManager extends Call.ListenerBase
         RingtoneFactory ringtoneFactory = new RingtoneFactory(this, context);
         SystemVibrator systemVibrator = new SystemVibrator(context);
         mInCallController = new InCallController(
-                context, mLock, this, systemStateProvider, defaultDialerAdapter, mTimeoutsAdapter);
+                context, mLock, this, systemStateProvider, defaultDialerCache, mTimeoutsAdapter,
+                emergencyLocationHelper);
         mRinger = new Ringer(playerFactory, context, systemSettingsUtil, asyncRingtonePlayer,
                 ringtoneFactory, systemVibrator, mInCallController);
 
@@ -367,8 +369,7 @@ public class CallsManager extends Call.ListenerBase
         filters.add(new DirectToVoicemailCallFilter(mCallerInfoLookupHelper));
         filters.add(new AsyncBlockCheckFilter(mContext, new BlockCheckerAdapter()));
         filters.add(new CallScreeningServiceFilter(mContext, this, mPhoneAccountRegistrar,
-                mDefaultDialerManagerAdapter,
-                new ParcelableCallUtils.Converter(), mLock));
+                mDefaultDialerCache, new ParcelableCallUtils.Converter(), mLock));
         new IncomingCallFilter(mContext, this, incomingCall, mLock,
                 mTimeoutsAdapter, filters).performFiltering();
     }
@@ -637,6 +638,7 @@ public class CallsManager extends Call.ListenerBase
         return mCallAudioManager.getForegroundCall();
     }
 
+    @Override
     public UserHandle getCurrentUserHandle() {
         return mCurrentUserHandle;
     }
@@ -1107,7 +1109,7 @@ public class CallsManager extends Call.ListenerBase
     public boolean isSpeakerphoneAutoEnabledForVideoCalls(int videoState) {
         return VideoProfile.isVideo(videoState) &&
             !mWiredHeadsetManager.isPluggedIn() &&
-            !mBluetoothManager.isBluetoothAvailable() &&
+            !mBluetoothRouteManager.isBluetoothAvailable() &&
             isSpeakerEnabledForVideoCalls();
     }
 
@@ -1121,7 +1123,7 @@ public class CallsManager extends Call.ListenerBase
     private boolean isSpeakerphoneEnabledForDock() {
         return mDockManager.isDocked() &&
             !mWiredHeadsetManager.isPluggedIn() &&
-            !mBluetoothManager.isBluetoothAvailable();
+            !mBluetoothRouteManager.isBluetoothAvailable();
     }
 
     /**
@@ -2170,7 +2172,8 @@ public class CallsManager extends Call.ListenerBase
      * Callback when foreground user is switched. We will reload missed call in all profiles
      * including the user itself. There may be chances that profiles are not started yet.
      */
-    void onUserSwitch(UserHandle userHandle) {
+    @VisibleForTesting
+    public void onUserSwitch(UserHandle userHandle) {
         mCurrentUserHandle = userHandle;
         mMissedCallNotifier.setCurrentUserHandle(userHandle);
         final UserManager userManager = UserManager.get(mContext);
@@ -2238,6 +2241,13 @@ public class CallsManager extends Call.ListenerBase
             pw.println("mInCallController:");
             pw.increaseIndent();
             mInCallController.dump(pw);
+            pw.decreaseIndent();
+        }
+
+        if (mDefaultDialerCache != null) {
+            pw.println("mDefaultDialerCache:");
+            pw.increaseIndent();
+            mDefaultDialerCache.dumpCache(pw);
             pw.decreaseIndent();
         }
 

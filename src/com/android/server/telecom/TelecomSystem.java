@@ -17,12 +17,14 @@
 package com.android.server.telecom;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.telecom.bluetooth.BluetoothDeviceManager;
+import com.android.server.telecom.bluetooth.BluetoothRouteManager;
 import com.android.server.telecom.components.UserCallIntentProcessor;
 import com.android.server.telecom.components.UserCallIntentProcessorFactory;
 import com.android.server.telecom.ui.MissedCallNotifierImpl.MissedCallNotifierImplFactory;
 import com.android.server.telecom.BluetoothPhoneServiceImpl.BluetoothPhoneServiceImplFactory;
 import com.android.server.telecom.CallAudioManager.AudioServiceFactory;
-import com.android.server.telecom.TelecomServiceImpl.DefaultDialerManagerAdapter;
+import com.android.server.telecom.DefaultDialerCache.DefaultDialerManagerAdapter;
 
 import android.Manifest;
 import android.content.BroadcastReceiver;
@@ -184,9 +186,14 @@ public class TelecomSystem {
             InterruptionFilterProxy interruptionFilterProxy) {
         mContext = context.getApplicationContext();
         LogUtils.initLogging(mContext);
+        DefaultDialerManagerAdapter defaultDialerAdapter =
+                new DefaultDialerCache.DefaultDialerManagerAdapterImpl();
+
+        DefaultDialerCache defaultDialerCache = new DefaultDialerCache(mContext,
+                defaultDialerAdapter, mLock);
 
         Log.startSession("TS.init");
-        mPhoneAccountRegistrar = new PhoneAccountRegistrar(mContext);
+        mPhoneAccountRegistrar = new PhoneAccountRegistrar(mContext, defaultDialerCache);
         mContactsAsyncHelper = new ContactsAsyncHelper(
                 new ContactsAsyncHelper.ContentResolverAdapter() {
                     @Override
@@ -195,16 +202,18 @@ public class TelecomSystem {
                         return context.getContentResolver().openInputStream(uri);
                     }
                 });
-        BluetoothManager bluetoothManager = new BluetoothManager(mContext,
-                new BluetoothAdapterProxy());
+        BluetoothDeviceManager bluetoothDeviceManager = new BluetoothDeviceManager(mContext,
+                new BluetoothAdapterProxy(), mLock);
+        BluetoothRouteManager bluetoothRouteManager = new BluetoothRouteManager(mContext, mLock,
+                bluetoothDeviceManager, new Timeouts.Adapter());
         WiredHeadsetManager wiredHeadsetManager = new WiredHeadsetManager(mContext);
         SystemStateProvider systemStateProvider = new SystemStateProvider(mContext);
 
         mMissedCallNotifier = missedCallNotifierImplFactory
-                .makeMissedCallNotifierImpl(mContext, mPhoneAccountRegistrar);
+                .makeMissedCallNotifierImpl(mContext, mPhoneAccountRegistrar, defaultDialerCache);
 
-        DefaultDialerManagerAdapter defaultDialerAdapter =
-                new TelecomServiceImpl.DefaultDialerManagerAdapterImpl();
+        EmergencyLocationHelper emergencyLocationHelper = new EmergencyLocationHelper(mContext,
+                mContext.getResources().getString(R.string.ui_default_package), timeoutsAdapter);
 
         mCallsManager = new CallsManager(
                 mContext,
@@ -217,14 +226,15 @@ public class TelecomSystem {
                 proximitySensorManagerFactory,
                 inCallWakeLockControllerFactory,
                 audioServiceFactory,
-                bluetoothManager,
+                bluetoothRouteManager,
                 wiredHeadsetManager,
                 systemStateProvider,
-                defaultDialerAdapter,
+                defaultDialerCache,
                 timeoutsAdapter,
                 asyncRingtonePlayer,
                 phoneNumberUtilsAdapter,
-                interruptionFilterProxy);
+                interruptionFilterProxy,
+                emergencyLocationHelper);
 
         mRespondViaSmsManager = new RespondViaSmsManager(mCallsManager, mLock);
         mCallsManager.setRespondViaSmsManager(mRespondViaSmsManager);
@@ -253,7 +263,7 @@ public class TelecomSystem {
                         return new UserCallIntentProcessor(context, userHandle);
                     }
                 },
-                defaultDialerAdapter,
+                defaultDialerCache,
                 new TelecomServiceImpl.SubscriptionManagerAdapterImpl(),
                 mLock);
         Log.endSession();

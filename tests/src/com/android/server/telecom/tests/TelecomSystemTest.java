@@ -67,6 +67,7 @@ import com.android.server.telecom.CallerInfoAsyncQueryFactory;
 import com.android.server.telecom.CallerInfoLookupHelper;
 import com.android.server.telecom.CallsManager;
 import com.android.server.telecom.CallsManagerListenerBase;
+import com.android.server.telecom.DefaultDialerCache;
 import com.android.server.telecom.HeadsetMediaButton;
 import com.android.server.telecom.HeadsetMediaButtonFactory;
 import com.android.server.telecom.InCallWakeLockController;
@@ -332,6 +333,10 @@ public class TelecomSystemTest extends TelecomTestCase {
 
     @Override
     public void tearDown() throws Exception {
+        mTelecomSystem.getCallsManager().getCallAudioManager()
+                .getCallAudioRouteStateMachine().quitNow();
+        mTelecomSystem.getCallsManager().getCallAudioManager()
+                .getCallAudioModeStateMachine().quitNow();
         mTelecomSystem = null;
         super.tearDown();
     }
@@ -384,7 +389,8 @@ public class TelecomSystemTest extends TelecomTestCase {
                 new MissedCallNotifierImplFactory() {
                     @Override
                     public MissedCallNotifier makeMissedCallNotifierImpl(Context context,
-                            PhoneAccountRegistrar phoneAccountRegistrar) {
+                            PhoneAccountRegistrar phoneAccountRegistrar,
+                            DefaultDialerCache defaultDialerCache) {
                         return mMissedCallNotifier;
                     }
                 },
