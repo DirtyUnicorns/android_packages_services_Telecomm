@@ -350,6 +350,9 @@ public class TelecomServiceImpl {
                     try {
                         enforcePhoneAccountModificationForPackage(
                                 account.getAccountHandle().getComponentName().getPackageName());
+                        if (account.hasCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)) {
+                            enforceRegisterSelfManaged();
+                        }
                         if (account.hasCapabilities(PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION)) {
                             enforceRegisterSimSubscriptionPermission();
                         }
@@ -363,6 +366,7 @@ public class TelecomServiceImpl {
                         try {
                             Intent intent = new Intent(
                                     TelecomManager.ACTION_PHONE_ACCOUNT_REGISTERED);
+                            intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
                             intent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
                                     account.getAccountHandle());
                             Log.i(this, "Sending phone-account registered intent as user");
@@ -396,6 +400,7 @@ public class TelecomServiceImpl {
                     try {
                         Intent intent =
                                 new Intent(TelecomManager.ACTION_PHONE_ACCOUNT_UNREGISTERED);
+                        intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
                         intent.putExtra(
                                 TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, accountHandle);
                         Log.i(this, "Sending phone-account unregistered intent as user");
@@ -1177,6 +1182,51 @@ public class TelecomServiceImpl {
         public Intent createManageBlockedNumbersIntent() {
             return BlockedNumbersActivity.getIntentForStartingActivity();
         }
+
+        /**
+         * @see android.telecom.TelecomManager#isIncomingCallPermitted(PhoneAccountHandle)
+         */
+        @Override
+        public boolean isIncomingCallPermitted(PhoneAccountHandle phoneAccountHandle) {
+            try {
+                Log.startSession("TSI.iICP");
+                enforcePermission(android.Manifest.permission.MANAGE_OWN_CALLS);
+                synchronized (mLock) {
+                    long token = Binder.clearCallingIdentity();
+                    try {
+                        // TODO(3pcalls) - Implement body.
+                    } finally {
+                        Binder.restoreCallingIdentity(token);
+                    }
+                }
+            } finally {
+                Log.endSession();
+            }
+            return true;
+        }
+
+        /**
+         * @see android.telecom.TelecomManager#isOutgoingCallPermitted(PhoneAccountHandle)
+         */
+        @Override
+        public boolean isOutgoingCallPermitted(PhoneAccountHandle phoneAccountHandle) {
+            try {
+                Log.startSession("TSI.iOCP");
+                enforcePermission(android.Manifest.permission.MANAGE_OWN_CALLS);
+                synchronized (mLock) {
+                    long token = Binder.clearCallingIdentity();
+                    try {
+                        // TODO(3pcalls) - Implement body.
+                    } finally {
+                        Binder.restoreCallingIdentity(token);
+                    }
+                }
+            } finally {
+                Log.endSession();
+            }
+
+            return true;
+        }
     };
 
     private Context mContext;
@@ -1348,6 +1398,10 @@ public class TelecomServiceImpl {
 
     private void enforcePermission(String permission) {
         mContext.enforceCallingOrSelfPermission(permission, null);
+    }
+
+    private void enforceRegisterSelfManaged() {
+        mContext.enforceCallingPermission(android.Manifest.permission.MANAGE_OWN_CALLS, null);
     }
 
     private void enforceRegisterMultiUser() {

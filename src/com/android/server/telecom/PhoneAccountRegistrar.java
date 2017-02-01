@@ -448,6 +448,7 @@ public class PhoneAccountRegistrar {
      */
     public boolean enablePhoneAccount(PhoneAccountHandle accountHandle, boolean isEnabled) {
         PhoneAccount account = getPhoneAccountUnchecked(accountHandle);
+        Log.i(this, "Phone account %s %s.", accountHandle, isEnabled ? "enabled" : "disabled");
         if (account == null) {
             Log.w(this, "Could not find account to enable: " + accountHandle);
             return false;
@@ -643,9 +644,11 @@ public class PhoneAccountRegistrar {
         // Set defaults and replace based on the group Id.
         maybeReplaceOldAccount(account);
         // Reset enabled state to whatever the value was if the account was already registered,
-        // or _true_ if this is a SIM-based account.  All SIM-based accounts are always enabled.
+        // or _true_ if this is a SIM-based account.  All SIM-based accounts are always enabled,
+        // as are all self-managed phone accounts.
         account.setIsEnabled(
-                isEnabled || account.hasCapabilities(PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION));
+                isEnabled || account.hasCapabilities(PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION)
+                || account.hasCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED));
 
         write();
         fireAccountsChanged();
@@ -1479,8 +1482,9 @@ public class PhoneAccountRegistrar {
                                 parser.next();
                                 userSerialNumberString = parser.getText();
                             } else if (parser.getName().equals(GROUP_ID)) {
-                                parser.next();
-                                groupId = parser.getText();
+                                if (parser.next() == XmlPullParser.TEXT) {
+                                    groupId = parser.getText();
+                                }
                             }
                         }
                         UserHandle userHandle = null;
