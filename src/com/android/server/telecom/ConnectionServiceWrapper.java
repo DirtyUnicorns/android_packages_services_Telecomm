@@ -862,32 +862,39 @@ public class ConnectionServiceWrapper extends ServiceBinder {
 
                 if (call.isIncoming() && mCallsManager.getEmergencyCallHelper()
                         .getLastEmergencyCallTimeMillis() > 0) {
-                  // Add the last emergency call time to the connection request
-                  extras = new Bundle();
+                  // Add the last emergency call time to the connection request for incoming calls
+                  if (extras == call.getIntentExtras()) {
+                    extras = (Bundle) extras.clone();
+                  }
                   extras.putLong(android.telecom.Call.EXTRA_LAST_EMERGENCY_CALLBACK_TIME_MILLIS,
                       mCallsManager.getEmergencyCallHelper().getLastEmergencyCallTimeMillis());
-                  call.putExtras(Call.SOURCE_CONNECTION_SERVICE, extras);
                 }
 
                 Log.addEvent(call, LogUtils.Events.START_CONNECTION, Log.piiHandle(call.getHandle()));
-                try {
-                    // For self-managed incoming calls, if there is another ongoing call Telecom is
-                    // responsible for showing a UI to ask the user if they'd like to answer this
-                    // new incoming call.
-                    boolean shouldShowIncomingCallUI = call.isSelfManaged() &&
-                            !mCallsManager.hasCallsForOtherPhoneAccount(
-                                    call.getTargetPhoneAccount());
 
+                // For self-managed incoming calls, if there is another ongoing call Telecom is
+                // responsible for showing a UI to ask the user if they'd like to answer this
+                // new incoming call.
+                boolean shouldShowIncomingCallUI = call.isSelfManaged() &&
+                        !mCallsManager.hasCallsForOtherPhoneAccount(
+                                call.getTargetPhoneAccount());
+
+                ConnectionRequest connectionRequest = new ConnectionRequest.Builder()
+                        .setAccountHandle(call.getTargetPhoneAccount())
+                        .setAddress(call.getHandle())
+                        .setExtras(call.getIntentExtras())
+                        .setVideoState(call.getVideoState())
+                        .setTelecomCallId(callId)
+                        .setShouldShowIncomingCallUi(shouldShowIncomingCallUI)
+                        .setRttPipeFromInCall(call.getInCallToCsRttPipeForCs())
+                        .setRttPipeToInCall(call.getCsToInCallRttPipeForCs())
+                        .build();
+
+                try {
                     mServiceInterface.createConnection(
                             call.getConnectionManagerPhoneAccount(),
                             callId,
-                            new ConnectionRequest(
-                                    call.getTargetPhoneAccount(),
-                                    call.getHandle(),
-                                    extras,
-                                    call.getVideoState(),
-                                    callId,
-                                    shouldShowIncomingCallUI),
+                            connectionRequest,
                             call.shouldAttachToExistingConnection(),
                             call.isUnknown(),
                             Log.getExternalSession());

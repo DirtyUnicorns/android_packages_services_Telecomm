@@ -572,7 +572,8 @@ public class CallsManager extends Call.ListenerBase
     }
 
     @Override
-    public boolean onCanceledViaNewOutgoingCallBroadcast(final Call call) {
+    public boolean onCanceledViaNewOutgoingCallBroadcast(final Call call,
+            long disconnectionTimeout) {
         mPendingCallsToDisconnect.add(call);
         mHandler.postDelayed(new Runnable("CM.oCVNOCB", mLock) {
             @Override
@@ -582,7 +583,7 @@ public class CallsManager extends Call.ListenerBase
                     call.disconnect();
                 }
             }
-        }.prepare(), Timeouts.getNewOutgoingCallCancelMillis(mContext.getContentResolver()));
+        }.prepare(), disconnectionTimeout);
 
         return true;
     }
@@ -762,6 +763,12 @@ public class CallsManager extends Call.ListenerBase
         if (phoneAccount != null) {
             call.setIsSelfManaged(phoneAccount.isSelfManaged());
         }
+        if (extras.getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
+            if (phoneAccount != null &&
+                    phoneAccount.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
+                call.setIsRttCall(true);
+            }
+        }
 
         call.initAnalytics();
         if (getForegroundCall() != null) {
@@ -896,9 +903,9 @@ public class CallsManager extends Call.ListenerBase
             isReusedCall = false;
         }
 
-        // Set the video state on the call early so that when it is added to the InCall UI the UI
-        // knows to configure itself as a video call immediately.
         if (extras != null) {
+            // Set the video state on the call early so that when it is added to the InCall UI the
+            // UI knows to configure itself as a video call immediately.
             int videoState = extras.getInt(TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE,
                     VideoProfile.STATE_AUDIO_ONLY);
 
@@ -998,8 +1005,16 @@ public class CallsManager extends Call.ListenerBase
             call.setState(
                     CallState.CONNECTING,
                     phoneAccountHandle == null ? "no-handle" : phoneAccountHandle.toString());
+            PhoneAccount accountToUse =
+                    mPhoneAccountRegistrar.getPhoneAccount(phoneAccountHandle, initiatingUser);
+            if (extras != null
+                    && extras.getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
+                if (accountToUse != null
+                        && accountToUse.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
+                    call.setIsRttCall(true);
+                }
+            }
         }
-
         setIntentExtrasAndStartTime(call, extras);
 
         // Do not add the call if it is a potential MMI code.
@@ -1443,6 +1458,16 @@ public class CallsManager extends Call.ListenerBase
         } else {
             call.setTargetPhoneAccount(account);
 
+            if (call.getIntentExtras()
+                    .getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
+                PhoneAccount realPhoneAccount =
+                        mPhoneAccountRegistrar.getPhoneAccountUnchecked(account);
+                if (realPhoneAccount != null
+                        && realPhoneAccount.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
+                    call.setIsRttCall(true);
+                }
+            }
+
             if (!call.isNewOutgoingCallIntentBroadcastDone()) {
                 return;
             }
@@ -1871,6 +1896,7 @@ public class CallsManager extends Call.ListenerBase
         call.setParentCall(null);  // need to clean up parent relationship before destroying.
         call.removeListener(this);
         call.clearConnectionService();
+        // TODO: clean up RTT pipes
 
         boolean shouldNotify = false;
         if (mCalls.contains(call)) {
