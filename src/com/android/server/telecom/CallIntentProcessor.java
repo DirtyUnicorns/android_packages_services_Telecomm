@@ -155,6 +155,7 @@ public class CallIntentProcessor {
             final boolean success = result == DisconnectCause.NOT_DISCONNECTED;
 
             if (!success && call != null) {
+                callsManager.clearPendingMOEmergencyCall();
                 disconnectCallAndShowErrorDialog(context, call, result);
             }
         }
