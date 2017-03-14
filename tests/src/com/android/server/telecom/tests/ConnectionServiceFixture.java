@@ -30,6 +30,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.IInterface;
+import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.telecom.CallAudioState;
 import android.telecom.Conference;
@@ -239,8 +240,9 @@ public class ConnectionServiceFixture implements TestFixture<IConnectionService>
         }
 
         @Override
-        public void createConnectionFailed(String callId, ConnectionRequest request,
-                boolean isIncoming, Session.Info sessionInfo) throws RemoteException {
+        public void createConnectionFailed(PhoneAccountHandle connectionManagerPhoneAccount,
+                String callId, ConnectionRequest request, boolean isIncoming,
+                Session.Info sessionInfo) throws RemoteException {
             Log.i(ConnectionServiceFixture.this, "createConnectionFailed --> " + callId);
 
             if (mConnectionById.containsKey(callId)) {
@@ -325,6 +327,23 @@ public class ConnectionServiceFixture implements TestFixture<IConnectionService>
         public void onExtrasChanged(String callId, Bundle extras,
                 Session.Info info) throws RemoteException {
             mConnectionServiceDelegateAdapter.onExtrasChanged(callId, extras, info);
+        }
+
+        @Override
+        public void startRtt(String callId, ParcelFileDescriptor fromInCall,
+                ParcelFileDescriptor toInCall, Session.Info sessionInfo) throws RemoteException {
+
+        }
+
+        @Override
+        public void stopRtt(String callId, Session.Info sessionInfo) throws RemoteException {
+
+        }
+
+        @Override
+        public void respondToRttUpgradeRequest(String callId, ParcelFileDescriptor fromInCall,
+                ParcelFileDescriptor toInCall, Session.Info sessionInfo) throws RemoteException {
+
         }
 
         @Override
