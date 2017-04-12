@@ -1099,6 +1099,11 @@ public class CallsManager extends Call.ListenerBase
                     false /* forceAttachToExistingConnection */,
                     false, /* isConference */
                     mClockProxy);
+            if ((extras != null) &&
+                    extras.getBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false)) {
+                //Reset PostDialDigits with empty string for ConfURI call.
+                call.setPostDialDigits("");
+            }
             call.initAnalytics();
 
             // Ensure new calls related to self-managed calls/connections are set as such.  This
@@ -1146,8 +1151,30 @@ public class CallsManager extends Call.ListenerBase
             call.setVideoState(videoState);
         }
 
+        boolean isAddParticipant = ((extras != null) && (extras.getBoolean(
+                TelephonyProperties.ADD_PARTICIPANT_KEY, false)));
+        boolean isSkipSchemaOrConfUri = ((extras != null) && (extras.getBoolean(
+                TelephonyProperties.EXTRA_SKIP_SCHEMA_PARSING, false) ||
+                extras.getBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false)));
+
+        if (isAddParticipant) {
+            String number = handle.getSchemeSpecificPart();
+            if (!isSkipSchemaOrConfUri) {
+                number = PhoneNumberUtils.stripSeparators(number);
+            }
+            addParticipant(number);
+            mInCallController.bringToForeground(false);
+            return null;
+        }
+        // Force tel scheme for ims conf uri/skip schema calls to avoid selection of sip accounts
+        String scheme = (isSkipSchemaOrConfUri? PhoneAccount.SCHEME_TEL: handle.getScheme());
+
+        Log.d(this, "startOutgoingCall :: isAddParticipant=" + isAddParticipant
+                + " isSkipSchemaOrConfUri=" + isSkipSchemaOrConfUri + " scheme=" + scheme);
+
         List<PhoneAccountHandle> potentialPhoneAccounts = findOutgoingCallPhoneAccount(
-                phoneAccountHandle, handle, VideoProfile.isVideo(videoState), initiatingUser);
+                phoneAccountHandle, handle, VideoProfile.isVideo(videoState),
+                initiatingUser, scheme);
         if (potentialPhoneAccounts.size() == 1) {
             phoneAccountHandle = potentialPhoneAccounts.get(0);
         } else {
@@ -1256,18 +1283,25 @@ public class CallsManager extends Call.ListenerBase
     public List<PhoneAccountHandle> findOutgoingCallPhoneAccount(
             PhoneAccountHandle targetPhoneAccountHandle, Uri handle, boolean isVideo,
             UserHandle initiatingUser) {
+        return findOutgoingCallPhoneAccount(targetPhoneAccountHandle, handle, isVideo,
+                initiatingUser, null);
+    }
+
+    public List<PhoneAccountHandle> findOutgoingCallPhoneAccount(
+            PhoneAccountHandle targetPhoneAccountHandle, Uri handle, boolean isVideo,
+            UserHandle initiatingUser, String scheme) {
         boolean isSelfManaged = isSelfManaged(targetPhoneAccountHandle, initiatingUser);
 
         List<PhoneAccountHandle> accounts;
         if (!isSelfManaged) {
             // Try to find a potential phone account, taking into account whether this is a video
             // call.
-            accounts = constructPossiblePhoneAccounts(handle, initiatingUser, isVideo);
+            accounts = constructPossiblePhoneAccounts(handle, initiatingUser, isVideo, scheme);
             if (isVideo && accounts.size() == 0) {
                 // Placing a video call but no video capable accounts were found, so consider any
                 // call capable accounts (we can fallback to audio).
                 accounts = constructPossiblePhoneAccounts(handle, initiatingUser,
-                        false /* isVideo */);
+                        false /* isVideo */, scheme);
             }
             Log.v(this, "findOutgoingCallPhoneAccount: accounts = " + accounts);
 
@@ -1289,7 +1323,7 @@ public class CallsManager extends Call.ListenerBase
                 if (accounts.size() > 1) {
                     PhoneAccountHandle defaultPhoneAccountHandle =
                             mPhoneAccountRegistrar.getOutgoingPhoneAccountForScheme(
-                                    handle.getScheme(), initiatingUser);
+                                    scheme == null ? handle.getScheme() : scheme, initiatingUser);
                     if (defaultPhoneAccountHandle != null &&
                             accounts.contains(defaultPhoneAccountHandle)) {
                         accounts.clear();
@@ -1397,6 +1431,22 @@ public class CallsManager extends Call.ListenerBase
             markCallAsDisconnected(call, new DisconnectCause(DisconnectCause.CANCELED,
                     "No registered PhoneAccounts"));
             markCallAsRemoved(call);
+        }
+    }
+
+    /**
+     * Attempts to add participant in a call.
+     *
+     * @param number number to connect the call with.
+     */
+    private void addParticipant(String number) {
+        Log.i(this, "addParticipant number ="+number);
+        if (getForegroundCall() == null) {
+            // don't do anything if the call no longer exists
+            Log.i(this, "Canceling unknown call.");
+            return;
+        } else {
+            getForegroundCall().addParticipantWithConference(number);
         }
     }
 
@@ -1675,14 +1725,25 @@ public class CallsManager extends Call.ListenerBase
     @VisibleForTesting
     public List<PhoneAccountHandle> constructPossiblePhoneAccounts(Uri handle, UserHandle user,
             boolean isVideo) {
+        return constructPossiblePhoneAccounts(handle, user, isVideo, null);
+    }
+
+    public List<PhoneAccountHandle> constructPossiblePhoneAccounts(Uri handle, UserHandle user,
+            boolean isVideo, String scheme) {
         if (handle == null) {
             return Collections.emptyList();
         }
+
+        if (scheme == null) {
+            scheme = handle.getScheme();
+        }
+
         // If we're specifically looking for video capable accounts, then include that capability,
         // otherwise specify no additional capability constraints.
         List<PhoneAccountHandle> allAccounts =
-                mPhoneAccountRegistrar.getCallCapablePhoneAccounts(handle.getScheme(), false, user,
+                mPhoneAccountRegistrar.getCallCapablePhoneAccounts(scheme, false, user,
                         isVideo ? PhoneAccount.CAPABILITY_VIDEO_CALLING : 0 /* any */);
+
         // First check the Radio SIM Technology
         if(mRadioSimVariants == null) {
             TelephonyManager tm = (TelephonyManager) mContext.getSystemService(

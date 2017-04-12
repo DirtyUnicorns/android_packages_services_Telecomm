@@ -1353,6 +1353,17 @@ public class ConnectionServiceWrapper extends ServiceBinder implements
         }
     }
 
+    void addParticipantWithConference(Call call, String recipients) {
+        final String callId = mCallIdMapper.getCallId(call);
+            if (isServiceValid("addParticipantWithConference")) {
+                try {
+                    logOutgoing("addParticipantWithConference %s, %s", recipients, callId);
+                    mServiceInterface.addParticipantWithConference(callId, recipients);
+                } catch (RemoteException ignored) {
+                }
+        }
+    }
+
     void mergeConference(Call call) {
         final String callId = mCallIdMapper.getCallId(call);
         if (callId != null && isServiceValid("mergeConference")) {
