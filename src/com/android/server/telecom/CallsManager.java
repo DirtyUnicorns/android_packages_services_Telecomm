@@ -991,6 +991,11 @@ public class CallsManager extends Call.ListenerBase
                     false /* forceAttachToExistingConnection */,
                     false /* isConference */
             );
+            if ((extras != null) &&
+                    extras.getBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false)) {
+                //Reset PostDialDigits with empty string for ConfURI call.
+                call.setPostDialDigits("");
+            }
             call.initAnalytics();
 
             // Ensure new calls related to self-managed calls/connections are set as such.  This
@@ -1040,13 +1045,34 @@ public class CallsManager extends Call.ListenerBase
             call.setVideoState(videoState);
         }
 
+        boolean isAddParticipant = ((extras != null) && (extras.getBoolean(
+                TelephonyProperties.ADD_PARTICIPANT_KEY, false)));
+        boolean isSkipSchemaOrConfUri = ((extras != null) && (extras.getBoolean(
+                TelephonyProperties.EXTRA_SKIP_SCHEMA_PARSING, false) ||
+                extras.getBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false)));
+
+        if (isAddParticipant) {
+            String number = handle.getSchemeSpecificPart();
+            if (!isSkipSchemaOrConfUri) {
+                number = PhoneNumberUtils.stripSeparators(number);
+            }
+            addParticipant(number);
+            mInCallController.bringToForeground(false);
+            return null;
+        }
+        // Force tel scheme for ims conf uri/skip schema calls to avoid selection of sip accounts
+        String scheme = (isSkipSchemaOrConfUri? PhoneAccount.SCHEME_TEL: handle.getScheme());
+
+        Log.d(this, "startOutgoingCall :: isAddParticipant=" + isAddParticipant
+                + " isSkipSchemaOrConfUri=" + isSkipSchemaOrConfUri + " scheme=" + scheme);
+
         PhoneAccount targetPhoneAccount = mPhoneAccountRegistrar.getPhoneAccount(
                 phoneAccountHandle, initiatingUser);
         boolean isSelfManaged = targetPhoneAccount != null && targetPhoneAccount.isSelfManaged();
 
         List<PhoneAccountHandle> accounts;
         if (!isSelfManaged) {
-            accounts = constructPossiblePhoneAccounts(handle, initiatingUser);
+            accounts = constructPossiblePhoneAccounts(handle, initiatingUser, scheme);
             Log.v(this, "startOutgoingCall found accounts = " + accounts);
 
             // Only dial with the requested phoneAccount if it is still valid. Otherwise treat this
@@ -1064,7 +1090,7 @@ public class CallsManager extends Call.ListenerBase
                 if (accounts.size() > 1) {
                     PhoneAccountHandle defaultPhoneAccountHandle =
                             mPhoneAccountRegistrar.getOutgoingPhoneAccountForScheme(
-                                    handle.getScheme(), initiatingUser);
+                                    scheme, initiatingUser);
                     if (defaultPhoneAccountHandle != null &&
                             accounts.contains(defaultPhoneAccountHandle)) {
                         phoneAccountHandle = defaultPhoneAccountHandle;
@@ -1228,6 +1254,22 @@ public class CallsManager extends Call.ListenerBase
             markCallAsDisconnected(call, new DisconnectCause(DisconnectCause.CANCELED,
                     "No registered PhoneAccounts"));
             markCallAsRemoved(call);
+        }
+    }
+
+    /**
+     * Attempts to add participant in a call.
+     *
+     * @param number number to connect the call with.
+     */
+    private void addParticipant(String number) {
+        Log.i(this, "addParticipant number ="+number);
+        if (getForegroundCall() == null) {
+            // don't do anything if the call no longer exists
+            Log.i(this, "Canceling unknown call.");
+            return;
+        } else {
+            getForegroundCall().addParticipantWithConference(number);
         }
     }
 
@@ -1504,12 +1546,16 @@ public class CallsManager extends Call.ListenerBase
     // Construct the list of possible PhoneAccounts that the outgoing call can use based on the
     // active calls in CallsManager. If any of the active calls are on a SIM based PhoneAccount,
     // then include only that SIM based PhoneAccount and any non-SIM PhoneAccounts, such as SIP.
-    private List<PhoneAccountHandle> constructPossiblePhoneAccounts(Uri handle, UserHandle user) {
+    private List<PhoneAccountHandle> constructPossiblePhoneAccounts(Uri handle, UserHandle user,
+            String scheme) {
         if (handle == null) {
             return Collections.emptyList();
         }
+        if (scheme == null) {
+            scheme = handle.getScheme();
+        }
         List<PhoneAccountHandle> allAccounts =
-                mPhoneAccountRegistrar.getCallCapablePhoneAccounts(handle.getScheme(), false, user);
+                mPhoneAccountRegistrar.getCallCapablePhoneAccounts(scheme, false, user);
         // First check the Radio SIM Technology
         if(mRadioSimVariants == null) {
             TelephonyManager tm = (TelephonyManager) mContext.getSystemService(

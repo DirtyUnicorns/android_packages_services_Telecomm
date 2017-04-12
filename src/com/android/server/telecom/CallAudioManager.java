@@ -19,12 +19,14 @@ package com.android.server.telecom;
 import android.annotation.NonNull;
 import android.media.IAudioService;
 import android.media.ToneGenerator;
+import android.os.Bundle;
 import android.telecom.CallAudioState;
 import android.telecom.Log;
 import android.telecom.VideoProfile;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.util.IndentingPrintWriter;
 
 import java.util.Collection;
@@ -359,6 +361,17 @@ public class CallAudioManager extends CallsManagerListenerBase {
             return mForegroundCall;
         }
         return null;
+    }
+
+    public boolean isIntermediateConfURICallDisconnected() {
+        Call disconnectedCall = mCallsManager.getFirstCallWithState(CallState.DISCONNECTED);
+        Bundle callExtra = (disconnectedCall != null) ? disconnectedCall.getIntentExtras() : null;
+        final boolean isMoConfURICallDisconnected = (callExtra == null) ? false :
+                !disconnectedCall.isIncoming() &&
+                callExtra.getBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false);
+        Log.i(this, "is ConfURI call disconnected = " + isMoConfURICallDisconnected + " call = "
+                + disconnectedCall);
+        return isMoConfURICallDisconnected && !mCallsManager.hasOnlyDisconnectedCalls();
     }
 
     void toggleMute() {
