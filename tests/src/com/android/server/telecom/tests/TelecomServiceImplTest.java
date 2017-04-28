@@ -466,22 +466,10 @@ public class TelecomServiceImplTest extends TelecomTestCase {
         if (shouldSucceed) {
             assertFalse(didExceptionOccur);
             verify(mFakePhoneAccountRegistrar).registerPhoneAccount(testPhoneAccount);
-            verify(mContext).sendBroadcastAsUser(intentCaptor.capture(), eq(UserHandle.ALL),
-                    anyString());
-
-            Intent capturedIntent = intentCaptor.getValue();
-            assertEquals(TelecomManager.ACTION_PHONE_ACCOUNT_REGISTERED,
-                    capturedIntent.getAction());
-            Bundle intentExtras = capturedIntent.getExtras();
-            assertEquals(1, intentExtras.size());
-            assertEquals(testPhoneAccount.getAccountHandle(),
-                    intentExtras.get(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE));
         } else {
             assertTrue(didExceptionOccur);
             verify(mFakePhoneAccountRegistrar, never())
                     .registerPhoneAccount(any(PhoneAccount.class));
-            verify(mContext, never())
-                    .sendBroadcastAsUser(any(Intent.class), any(UserHandle.class), anyString());
         }
     }
 
@@ -497,14 +485,6 @@ public class TelecomServiceImplTest extends TelecomTestCase {
 
         mTSIBinder.unregisterPhoneAccount(phHandle);
         verify(mFakePhoneAccountRegistrar).unregisterPhoneAccount(phHandle);
-        verify(mContext).sendBroadcastAsUser(intentCaptor.capture(), eq(UserHandle.ALL),
-                anyString());
-        Intent capturedIntent = intentCaptor.getValue();
-        assertEquals(TelecomManager.ACTION_PHONE_ACCOUNT_UNREGISTERED,
-                capturedIntent.getAction());
-        Bundle intentExtras = capturedIntent.getExtras();
-        assertEquals(1, intentExtras.size());
-        assertEquals(phHandle, intentExtras.get(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE));
     }
 
     @SmallTest
@@ -876,6 +856,56 @@ public class TelecomServiceImplTest extends TelecomTestCase {
         when(call.getVideoState()).thenReturn(fakeVideoState);
         mTSIBinder.acceptRingingCallWithVideoState("", realVideoState);
         verify(call).answer(realVideoState);
+    }
+
+    @SmallTest
+    public void testIsInCall() throws Exception {
+        when(mFakeCallsManager.hasOngoingCalls()).thenReturn(true);
+        assertTrue(mTSIBinder.isInCall(DEFAULT_DIALER_PACKAGE));
+    }
+
+    @SmallTest
+    public void testNotIsInCall() throws Exception {
+        when(mFakeCallsManager.hasOngoingCalls()).thenReturn(false);
+        assertFalse(mTSIBinder.isInCall(DEFAULT_DIALER_PACKAGE));
+    }
+
+    @SmallTest
+    public void testIsInCallFail() throws Exception {
+        doThrow(new SecurityException()).when(mContext).enforceCallingOrSelfPermission(
+                anyString(), any());
+        try {
+            mTSIBinder.isInCall("blah");
+            fail();
+        } catch (SecurityException e) {
+            // desired result
+        }
+        verify(mFakeCallsManager, never()).hasOngoingCalls();
+    }
+
+    @SmallTest
+    public void testIsInManagedCall() throws Exception {
+        when(mFakeCallsManager.hasOngoingManagedCalls()).thenReturn(true);
+        assertTrue(mTSIBinder.isInManagedCall(DEFAULT_DIALER_PACKAGE));
+    }
+
+    @SmallTest
+    public void testNotIsInManagedCall() throws Exception {
+        when(mFakeCallsManager.hasOngoingManagedCalls()).thenReturn(false);
+        assertFalse(mTSIBinder.isInManagedCall(DEFAULT_DIALER_PACKAGE));
+    }
+
+    @SmallTest
+    public void testIsInManagedCallFail() throws Exception {
+        doThrow(new SecurityException()).when(mContext).enforceCallingOrSelfPermission(
+                anyString(), any());
+        try {
+            mTSIBinder.isInManagedCall("blah");
+            fail();
+        } catch (SecurityException e) {
+            // desired result
+        }
+        verify(mFakeCallsManager, never()).hasOngoingCalls();
     }
 
     /**
