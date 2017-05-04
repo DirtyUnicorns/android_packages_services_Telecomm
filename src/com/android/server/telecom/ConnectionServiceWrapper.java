@@ -40,6 +40,7 @@ import android.telecom.PhoneAccountHandle;
 import android.telecom.StatusHints;
 import android.telecom.TelecomManager;
 import android.telecom.VideoProfile;
+import android.telephony.TelephonyManager;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telecom.IConnectionService;
@@ -764,6 +765,14 @@ public class ConnectionServiceWrapper extends ServiceBinder {
                     Bundle.setDefusable(extras, true);
                     Call call = mCallIdMapper.getCall(callId);
                     if (call != null) {
+                        if ((extras != null)
+                                    && extras.getParcelable(TelephonyManager.EMR_DIAL_ACCOUNT)
+                                    instanceof PhoneAccountHandle) {
+                            PhoneAccountHandle account = extras.
+                                    getParcelable(TelephonyManager.EMR_DIAL_ACCOUNT);
+                            Log.d(this, "setTargetPhoneAccount, account = " + account);
+                            call.setTargetPhoneAccount(account);
+                        }
                         call.onConnectionEvent(event, extras);
                     }
                 }
