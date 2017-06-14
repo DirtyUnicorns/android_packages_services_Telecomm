@@ -2276,6 +2276,11 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
     public void setVideoProvider(IVideoProvider videoProvider) {
         Log.v(this, "setVideoProvider");
 
+        if (mVideoProviderProxy != null) {
+            mVideoProviderProxy.clearVideoCallback();
+            mVideoProviderProxy = null;
+        }
+
         if (videoProvider != null ) {
             try {
                 mVideoProviderProxy = new VideoProviderProxy(mLock, videoProvider, this,
@@ -2283,8 +2288,6 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
             } catch (RemoteException ignored) {
                 // Ignore RemoteException.
             }
-        } else {
-            mVideoProviderProxy = null;
         }
 
         mVideoProvider = videoProvider;
