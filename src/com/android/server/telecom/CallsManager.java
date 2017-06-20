@@ -86,6 +86,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import org.codeaurora.ims.QtiCallConstants;
 /**
  * Singleton.
  *
@@ -491,6 +492,9 @@ public class CallsManager extends Call.ListenerBase
                 Log.i(this, "onCallFilteringCompleted: Call rejected! Exceeds maximum number of " +
                         "dialing calls.");
                 rejectCallAndLog(incomingCall);
+            } else if (!isIncomingVideoCallAllowed(incomingCall)) {
+                Log.i(this, "onCallFilteringCompleted: MT Video Call rejecting.");
+                rejectCallAndLog(incomingCall);
             } else {
                 addCall(incomingCall);
             }
@@ -512,6 +516,31 @@ public class CallsManager extends Call.ListenerBase
                         new MissedCallNotifier.CallInfo(incomingCall));
             }
         }
+    }
+
+    /**
+     * Determines if the incoming video call is allowed or not
+     *
+     * @param Call The incoming call.
+     * @return {@code false} if incoming video call is not allowed.
+     */
+    private static boolean isIncomingVideoCallAllowed(Call call) {
+        Bundle extras = call.getExtras();
+        if (extras == null || (!isIncomingVideoCall(call))) {
+            Log.w(TAG, "isIncomingVideoCallAllowed: null Extras or not an incoming video call " +
+                    "or allow video calls in low battery");
+            return true;
+        }
+
+        final boolean isLowBattery = extras.getBoolean(QtiCallConstants.LOW_BATTERY_EXTRA_KEY,
+                false);
+        Log.d(TAG, "isIncomingVideoCallAllowed: lowbattery = " + isLowBattery);
+        return !isLowBattery;
+    }
+
+    private static boolean isIncomingVideoCall(Call call) {
+        return (!VideoProfile.isAudioOnly(call.getVideoState()) &&
+            call.getState() == CallState.RINGING);
     }
 
     /**
