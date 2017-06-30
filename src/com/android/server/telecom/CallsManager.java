@@ -1166,8 +1166,10 @@ public class CallsManager extends Call.ListenerBase
             PhoneAccount accountToUse =
                     mPhoneAccountRegistrar.getPhoneAccount(phoneAccountHandle, initiatingUser);
             if (accountToUse != null) {
-                call.setIsVoipAudioMode(accountToUse.getExtras()
-                        .getBoolean(PhoneAccount.EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE));
+                if (accountToUse.getExtras() != null) {
+                    call.setIsVoipAudioMode(accountToUse.getExtras()
+                            .getBoolean(PhoneAccount.EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE));
+                }
             }
 
             call.setState(
@@ -1691,8 +1693,10 @@ public class CallsManager extends Call.ListenerBase
             PhoneAccount realPhoneAccount =
                     mPhoneAccountRegistrar.getPhoneAccountUnchecked(account);
             if (realPhoneAccount != null) {
-                call.setIsVoipAudioMode(realPhoneAccount.getExtras()
-                        .getBoolean(PhoneAccount.EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE));
+                if (realPhoneAccount.getExtras() != null) {
+                    call.setIsVoipAudioMode(realPhoneAccount.getExtras()
+                            .getBoolean(PhoneAccount.EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE));
+                }
             }
             if (call.getIntentExtras()
                     .getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
