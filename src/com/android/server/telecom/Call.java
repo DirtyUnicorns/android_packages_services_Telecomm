@@ -1398,6 +1398,10 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
         return mConnectTimeMillis;
     }
 
+    public void setConnectTimeMillis(long connectTimeMillis) {
+        mConnectTimeMillis = connectTimeMillis;
+    }
+
     int getConnectionCapabilities() {
         return mConnectionCapabilities;
     }
