@@ -127,10 +127,6 @@ public final class CallLogManager extends CallsManagerListenerBase {
     private Object mLock;
     private String mCurrentCountryIso;
 
-    private static final int INCOMING_IMS_TYPE = 8;
-    private static final int OUTGOING_IMS_TYPE = 9;
-    private static final int MISSED_IMS_TYPE = 10;
-
     public CallLogManager(Context context, PhoneAccountRegistrar phoneAccountRegistrar,
             MissedCallNotifier missedCallNotifier) {
         mContext = context;
@@ -226,8 +222,11 @@ public final class CallLogManager extends CallsManagerListenerBase {
 
         int callFeatures = getCallFeatures(call.getVideoStateHistory(),
                 call.getDisconnectCause().getCode() == DisconnectCause.CALL_PULLED);
+        final boolean imsCallLogEnabled = mContext.getResources().
+                getBoolean(R.bool.ims_call_type_enabled);
         logCall(call.getCallerInfo(), logNumber, call.getPostDialDigits(), formattedViaNumber,
-                call.getHandlePresentation(), toPreciseLogType(call, callLogType), callFeatures,
+                call.getHandlePresentation(), imsCallLogEnabled ?
+                toPreciseLogType(call, callLogType) : callLogType, callFeatures,
                 accountHandle, creationTime, age, callDataUsage, call.isEmergencyCall(),
                 call.getInitiatingUser(), logCallCompletedListener);
     }
@@ -489,13 +488,13 @@ public final class CallLogManager extends CallsManagerListenerBase {
         }
         switch (callLogType) {
             case Calls.INCOMING_TYPE :
-                callLogType = INCOMING_IMS_TYPE;
+                callLogType = Calls.INCOMING_IMS_TYPE;
                 break;
             case Calls.OUTGOING_TYPE :
-                callLogType = OUTGOING_IMS_TYPE;
+                callLogType = Calls.OUTGOING_IMS_TYPE;
                 break;
             case Calls.MISSED_TYPE :
-                callLogType = MISSED_IMS_TYPE;
+                callLogType = Calls.MISSED_IMS_TYPE;
                 break;
             default:
                 //Normal cs call, no change
