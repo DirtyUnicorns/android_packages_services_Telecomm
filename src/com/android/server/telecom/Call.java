@@ -25,11 +25,13 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.Trace;
 import android.provider.ContactsContract.Contacts;
 import android.telecom.CallAudioState;
 import android.telecom.Conference;
+import android.telecom.ConnectionService;
 import android.telecom.DisconnectCause;
 import android.telecom.Connection;
 import android.telecom.GatewayInfo;
@@ -127,6 +129,8 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
         void onExternalCallChanged(Call call, boolean isExternalCall);
         void onRttInitiationFailure(Call call, int reason);
         void onRemoteRttRequest(Call call, int requestId);
+        void onHandoverRequested(Call call, PhoneAccountHandle handoverTo, int videoState,
+                                 Bundle extras);
     }
 
     public abstract static class ListenerBase implements Listener {
@@ -198,6 +202,9 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
         public void onRttInitiationFailure(Call call, int reason) {}
         @Override
         public void onRemoteRttRequest(Call call, int requestId) {}
+        @Override
+        public void onHandoverRequested(Call call, PhoneAccountHandle handoverTo, int videoState,
+                                        Bundle extras) {}
     }
 
     private final CallerInfoLookupHelper.OnQueryCompleteListener mCallerInfoQueryListener =
@@ -446,6 +453,23 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
     private int mPendingRttRequestId = INVALID_RTT_REQUEST_ID;
 
     /**
+     * When a call handover has been initiated via {@link #requestHandover(PhoneAccountHandle,
+     * int, Bundle)}, contains the call which this call is being handed over to.
+     */
+    private Call mHandoverDestinationCall = null;
+
+    /**
+     * When a call handover has been initiated via {@link #requestHandover(PhoneAccountHandle,
+     * int, Bundle)}, contains the call which this call is being handed over from.
+     */
+    private Call mHandoverSourceCall = null;
+
+    /**
+     * Indicates the current state of this call if it is in the process of a handover.
+     */
+    private int mHandoverState = HandoverState.HANDOVER_NONE;
+
+    /**
      * Persists the specified parameters and initializes the new instance.
      *
      * @param context The context.
@@ -636,6 +660,23 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
 
         s.append("\n\tTo address: ");
         s.append(Log.piiHandle(getHandle()));
+        s.append(" Presentation: ");
+        switch (getHandlePresentation()) {
+            case TelecomManager.PRESENTATION_ALLOWED:
+                s.append("Allowed");
+                break;
+            case TelecomManager.PRESENTATION_PAYPHONE:
+                s.append("Payphone");
+                break;
+            case TelecomManager.PRESENTATION_RESTRICTED:
+                s.append("Restricted");
+                break;
+            case TelecomManager.PRESENTATION_UNKNOWN:
+                s.append("Unknown");
+                break;
+            default:
+                s.append("<undefined>");
+        }
         s.append("\n");
         return s.toString();
     }
@@ -739,6 +780,8 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
                 return;
             }
 
+            updateVideoHistoryViaState(mState, newState);
+
             mState = newState;
             maybeLoadCannedSmsResponses();
 
@@ -751,12 +794,6 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
                     mAnalytics.setCallStartTime(mConnectTimeMillis);
                 }
 
-                // Video state changes are normally tracked against history when a call is active.
-                // When the call goes active we need to be sure we track the history in case the
-                // state never changes during the duration of the call -- we want to ensure we
-                // always know the state at the start of the call.
-                mVideoStateHistory = mVideoStateHistory | mVideoState;
-
                 // We're clearly not disconnected, so reset the disconnected time.
                 mDisconnectTimeMillis = 0;
             } else if (mState == CallState.DISCONNECTED) {
@@ -764,11 +801,6 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
                 mAnalytics.setCallEndTime(mDisconnectTimeMillis);
                 setLocallyDisconnecting(false);
                 fixParentAfterDisconnect();
-            }
-            if (mState == CallState.DISCONNECTED &&
-                    mDisconnectCause.getCode() == DisconnectCause.MISSED) {
-                // Ensure when an incoming call is missed that the video state history is updated.
-                mVideoStateHistory |= mVideoState;
             }
 
             // Log the state transition event
@@ -1016,6 +1048,30 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
         return phoneAccount.getLabel();
     }
 
+    /**
+     * Determines if this Call should be written to the call log.
+     * @return {@code true} for managed calls or for self-managed calls which have the
+     * {@link PhoneAccount#EXTRA_LOG_SELF_MANAGED_CALLS} extra set.
+     */
+    public boolean isLoggedSelfManaged() {
+        if (!isSelfManaged()) {
+            // Managed calls are always logged.
+            return true;
+        }
+        if (getTargetPhoneAccount() == null) {
+            return false;
+        }
+        PhoneAccount phoneAccount = mCallsManager.getPhoneAccountRegistrar()
+                .getPhoneAccountUnchecked(getTargetPhoneAccount());
+
+        if (phoneAccount == null) {
+            return false;
+        }
+
+        return phoneAccount.getExtras() != null && phoneAccount.getExtras().getBoolean(
+                PhoneAccount.EXTRA_LOG_SELF_MANAGED_CALLS, false);
+    }
+
     @VisibleForTesting
     public boolean isIncoming() {
         return mCallDirection == CALL_DIRECTION_INCOMING;
@@ -1043,6 +1099,58 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
 
         // Connection properties will add/remove the PROPERTY_SELF_MANAGED.
         setConnectionProperties(getConnectionProperties());
+    }
+
+    public void markFinishedHandoverStateAndCleanup(int handoverState) {
+        if (mHandoverSourceCall != null) {
+            mHandoverSourceCall.setHandoverState(handoverState);
+        } else if (mHandoverDestinationCall != null) {
+            mHandoverDestinationCall.setHandoverState(handoverState);
+        }
+        setHandoverState(handoverState);
+        maybeCleanupHandover();
+    }
+
+    public void maybeCleanupHandover() {
+        if (mHandoverSourceCall != null) {
+            mHandoverSourceCall.setHandoverSourceCall(null);
+            mHandoverSourceCall.setHandoverDestinationCall(null);
+            mHandoverSourceCall = null;
+        } else if (mHandoverDestinationCall != null) {
+            mHandoverDestinationCall.setHandoverSourceCall(null);
+            mHandoverDestinationCall.setHandoverDestinationCall(null);
+            mHandoverDestinationCall = null;
+        }
+    }
+
+    public boolean isHandoverInProgress() {
+        return mHandoverSourceCall != null || mHandoverDestinationCall != null;
+    }
+
+    public Call getHandoverDestinationCall() {
+        return mHandoverDestinationCall;
+    }
+
+    public void setHandoverDestinationCall(Call call) {
+        mHandoverDestinationCall = call;
+    }
+
+    public Call getHandoverSourceCall() {
+        return mHandoverSourceCall;
+    }
+
+    public void setHandoverSourceCall(Call call) {
+        mHandoverSourceCall = call;
+    }
+
+    public void setHandoverState(int handoverState) {
+        Log.d(this, "setHandoverState: callId=%s, handoverState=%s", getId(),
+                HandoverState.stateToString(handoverState));
+        mHandoverState = handoverState;
+    }
+
+    public int getHandoverState() {
+        return mHandoverState;
     }
 
     private void configureIsWorkCall() {
@@ -1878,7 +1986,38 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
      */
     public void sendCallEvent(String event, Bundle extras) {
         if (mConnectionService != null) {
-            mConnectionService.sendCallEvent(this, event, extras);
+            if (android.telecom.Call.EVENT_REQUEST_HANDOVER.equals(event)) {
+                // Handover requests are targeted at Telecom, not the ConnectionService.
+                if (extras == null) {
+                    Log.w(this, "sendCallEvent: %s event received with null extras.",
+                            android.telecom.Call.EVENT_REQUEST_HANDOVER);
+                    mConnectionService.sendCallEvent(this,
+                            android.telecom.Call.EVENT_HANDOVER_FAILED, null);
+                    return;
+                }
+                Parcelable parcelable = extras.getParcelable(
+                        android.telecom.Call.EXTRA_HANDOVER_PHONE_ACCOUNT_HANDLE);
+                if (!(parcelable instanceof PhoneAccountHandle) || parcelable == null) {
+                    Log.w(this, "sendCallEvent: %s event received with invalid handover acct.",
+                            android.telecom.Call.EVENT_REQUEST_HANDOVER);
+                    mConnectionService.sendCallEvent(this,
+                            android.telecom.Call.EVENT_HANDOVER_FAILED, null);
+                    return;
+                }
+                PhoneAccountHandle phoneAccountHandle = (PhoneAccountHandle) parcelable;
+                int videoState = extras.getInt(android.telecom.Call.EXTRA_HANDOVER_VIDEO_STATE,
+                        VideoProfile.STATE_AUDIO_ONLY);
+                Parcelable handoverExtras = extras.getParcelable(
+                        android.telecom.Call.EXTRA_HANDOVER_EXTRAS);
+                Bundle handoverExtrasBundle = null;
+                if (handoverExtras instanceof Bundle) {
+                    handoverExtrasBundle = (Bundle) handoverExtras;
+                }
+                requestHandover(phoneAccountHandle, videoState, handoverExtrasBundle);
+            } else {
+                Log.addEvent(this, LogUtils.Events.CALL_EVENT, event);
+                mConnectionService.sendCallEvent(this, event, extras);
+            }
         } else {
             Log.e(this, new NullPointerException(),
                     "sendCallEvent failed due to null CS callId=%s", getId());
@@ -2357,13 +2496,14 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
             videoState = VideoProfile.STATE_AUDIO_ONLY;
         }
 
-        // Track which video states were applicable over the duration of the call.
-        // Only track the call state when the call is active or disconnected.  This ensures we do
-        // not include the video state when:
+        // Track Video State history during the duration of the call.
+        // Only update the history when the call is active or disconnected. This ensures we do
+        // not include the video state history when:
         // - Call is incoming (but not answered).
         // - Call it outgoing (but not answered).
         // We include the video state when disconnected to ensure that rejected calls reflect the
         // appropriate video state.
+        // For all other times we add to the video state history, see #setState.
         if (isActive() || getState() == CallState.DISCONNECTED) {
             mVideoStateHistory = mVideoStateHistory | videoState;
         }
@@ -2596,4 +2736,35 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
         return capabilities & ~(Connection.CAPABILITY_SUPPORTS_VT_LOCAL_BIDIRECTIONAL |
                 Connection.CAPABILITY_SUPPORTS_VT_REMOTE_BIDIRECTIONAL);
     }
+
+    /**
+     * Initiates a handover of this {@link Call} to another {@link PhoneAccount}.
+     * @param handoverToHandle The {@link PhoneAccountHandle} to handover to.
+     * @param videoState The video state of the call when handed over.
+     * @param extras Optional extras {@link Bundle} provided by the initiating
+     *      {@link android.telecom.InCallService}.
+     */
+    private void requestHandover(PhoneAccountHandle handoverToHandle, int videoState,
+                                 Bundle extras) {
+        for (Listener l : mListeners) {
+            l.onHandoverRequested(this, handoverToHandle, videoState, extras);
+        }
+    }
+
+    /**
+     * Sets the video history based on the state and state transitions of the call. Always add the
+     * current video state to the video state history during a call transition except for the
+     * transitions DIALING->ACTIVE and RINGING->ACTIVE. In these cases, clear the history. If a
+     * call starts dialing/ringing as a VT call and gets downgraded to audio, we need to record
+     * the history as an audio call.
+     */
+    private void updateVideoHistoryViaState(int oldState, int newState) {
+        if ((oldState == CallState.DIALING || oldState == CallState.RINGING)
+                && newState == CallState.ACTIVE) {
+            mVideoStateHistory = mVideoState;
+        }
+
+        mVideoStateHistory |= mVideoState;
+    }
+
 }

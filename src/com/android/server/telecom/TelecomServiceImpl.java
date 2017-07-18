@@ -77,6 +77,7 @@ public class TelecomServiceImpl {
         }
     }
 
+    private static final String TIME_LINE_ARG = "timeline";
     private static final int DEFAULT_VIDEO_STATE = -1;
 
     private final ITelecomService.Stub mBinderImpl = new ITelecomService.Stub() {
@@ -1082,6 +1083,10 @@ public class TelecomServiceImpl {
                 if (extras != null) {
                     phoneAccountHandle = extras.getParcelable(
                             TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE);
+                    if (extras.containsKey(TelecomManager.EXTRA_IS_HANDOVER)) {
+                        // This extra is for Telecom use only so should never be passed in.
+                        extras.remove(TelecomManager.EXTRA_IS_HANDOVER);
+                    }
                 }
                 boolean isSelfManaged = phoneAccountHandle != null &&
                         isSelfManagedConnectionService(phoneAccountHandle);
@@ -1222,6 +1227,7 @@ public class TelecomServiceImpl {
                 Analytics.dumpToEncodedProto(writer, args);
                 return;
             }
+            boolean isTimeLineView = (args.length > 0 && TIME_LINE_ARG.equalsIgnoreCase(args[0]));
 
             final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
             if (mCallsManager != null) {
@@ -1240,8 +1246,11 @@ public class TelecomServiceImpl {
                 Analytics.dump(pw);
                 pw.decreaseIndent();
             }
-
-            Log.dumpEvents(pw);
+            if (isTimeLineView) {
+                Log.dumpEventsTimeline(pw);
+            } else {
+                Log.dumpEvents(pw);
+            }
         }
 
         /**

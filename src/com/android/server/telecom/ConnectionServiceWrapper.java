@@ -957,6 +957,14 @@ public class ConnectionServiceWrapper extends ServiceBinder {
                       mCallsManager.getEmergencyCallHelper().getLastEmergencyCallTimeMillis());
                 }
 
+                // Call is incoming and added because we're handing over from another; tell CS
+                // that its expected to handover.
+                if (call.isIncoming() && call.getHandoverSourceCall() != null) {
+                    extras.putBoolean(TelecomManager.EXTRA_IS_HANDOVER, true);
+                    extras.putParcelable(TelecomManager.EXTRA_HANDOVER_FROM_PHONE_ACCOUNT,
+                            call.getHandoverSourceCall().getTargetPhoneAccount());
+                }
+
                 Log.addEvent(call, LogUtils.Events.START_CONNECTION,
                         Log.piiHandle(call.getHandle()));
 
