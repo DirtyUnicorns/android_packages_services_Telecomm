@@ -113,8 +113,10 @@ public class CallAudioManager extends CallsManagerListenerBase {
             playToneForDisconnectedCall(call);
         }
 
-        onCallLeavingState(call, oldState);
-        onCallEnteringState(call, newState);
+        if (!isIntermediateConfURICallDisconnected(call)) {
+            onCallLeavingState(call, oldState);
+            onCallEnteringState(call, newState);
+        }
     }
 
     @Override
@@ -364,8 +366,10 @@ public class CallAudioManager extends CallsManagerListenerBase {
         return null;
     }
 
-    public boolean isIntermediateConfURICallDisconnected() {
-        Call disconnectedCall = mCallsManager.getFirstCallWithState(CallState.DISCONNECTED);
+    private boolean isIntermediateConfURICallDisconnected(Call disconnectedCall) {
+        if(disconnectedCall.getState() != CallState.DISCONNECTED) {
+            return false;
+        }
         Bundle callExtra = (disconnectedCall != null) ? disconnectedCall.getIntentExtras() : null;
         final boolean isMoConfURICallDisconnected = (callExtra == null) ? false :
                 !disconnectedCall.isIncoming() &&
