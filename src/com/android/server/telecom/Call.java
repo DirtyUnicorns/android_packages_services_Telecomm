@@ -728,15 +728,16 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
      * (see {@link CallState}), in practice those expectations break down when cellular systems
      * misbehave and they do this very often. The result is that we do not enforce state transitions
      * and instead keep the code resilient to unexpected state changes.
+     * @return Whether the call is continuing to try
      */
-    public void setState(int newState, String tag) {
+    public boolean setState(int newState, String tag) {
         if (mState != newState) {
             Log.v(this, "setState %s -> %s", mState, newState);
 
             if (newState == CallState.DISCONNECTED && shouldContinueProcessingAfterDisconnect()) {
                 Log.w(this, "continuing processing disconnected call with another service");
                 mCreateConnectionProcessor.continueProcessingIfPossible(this, mDisconnectCause);
-                return;
+                return true;
             }
 
             mState = newState;
@@ -814,6 +815,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
                 Log.addEvent(this, event, stringData);
             }
         }
+        return false;
     }
 
     void setRingbackRequested(boolean ringbackRequested) {
