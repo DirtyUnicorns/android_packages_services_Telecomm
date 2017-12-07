@@ -227,7 +227,9 @@ public final class CallLogManager extends CallsManagerListenerBase {
                 call.getCallDataUsage();
 
         int callFeatures = getCallFeatures(call.getVideoStateHistory(),
-                call.getDisconnectCause().getCode() == DisconnectCause.CALL_PULLED);
+                call.getDisconnectCause().getCode() == DisconnectCause.CALL_PULLED,
+                (call.getConnectionProperties() & Connection.PROPERTY_ASSISTED_DIALING_USED) ==
+                        Connection.PROPERTY_ASSISTED_DIALING_USED);
         final boolean imsCallLogEnabled = mContext.getResources().
                 getBoolean(R.bool.ims_call_type_enabled);
         logCall(call.getCallerInfo(), logNumber, call.getPostDialDigits(), formattedViaNumber,
@@ -307,13 +309,17 @@ public final class CallLogManager extends CallsManagerListenerBase {
      * @param isPulledCall {@code true} if this call was pulled to another device.
      * @return The call features.
      */
-    private static int getCallFeatures(int videoState, boolean isPulledCall) {
+    private static int getCallFeatures(int videoState, boolean isPulledCall,
+                                       boolean isUsingAssistedDialing) {
         int features = 0;
         if (VideoProfile.isVideo(videoState)) {
             features |= Calls.FEATURES_VIDEO;
         }
         if (isPulledCall) {
             features |= Calls.FEATURES_PULLED_EXTERNALLY;
+        }
+        if (isUsingAssistedDialing) {
+            features |= Calls.FEATURES_ASSISTED_DIALING_USED;
         }
         return features;
     }
