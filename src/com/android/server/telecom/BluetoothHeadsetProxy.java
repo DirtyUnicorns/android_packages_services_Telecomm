@@ -67,4 +67,8 @@ public class BluetoothHeadsetProxy {
     public boolean disconnectAudio() {
         return mBluetoothHeadset.disconnectAudio();
     }
+
+    public BluetoothHeadset getBluetoothHeadsetObj() {
+        return mBluetoothHeadset;
+    }
 }
