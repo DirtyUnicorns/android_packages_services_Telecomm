@@ -1611,9 +1611,9 @@ public class PhoneAccountRegistrar {
                                         "Could not parse UserHandle " + userSerialNumberString);
                             }
                         }
-                        if (accountHandle != null && userHandle != null && groupId != null) {
-                            return new DefaultPhoneAccountHandle(userHandle, accountHandle,
-                                    groupId);
+                        if (accountHandle != null && userHandle != null) {
+                            return new DefaultPhoneAccountHandle(userHandle, accountHandle
+                                    , (groupId != null) ? groupId : "");
                         }
                     }
                     return null;

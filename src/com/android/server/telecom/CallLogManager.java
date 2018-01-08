@@ -27,6 +27,7 @@ import android.os.Looper;
 import android.os.UserHandle;
 import android.os.PersistableBundle;
 import android.provider.CallLog.Calls;
+import android.telecom.Connection;
 import android.telecom.DisconnectCause;
 import android.telecom.Log;
 import android.telecom.PhoneAccount;
@@ -227,10 +228,13 @@ public final class CallLogManager extends CallsManagerListenerBase {
 
         int callFeatures = getCallFeatures(call.getVideoStateHistory(),
                 call.getDisconnectCause().getCode() == DisconnectCause.CALL_PULLED);
+        final boolean imsCallLogEnabled = mContext.getResources().
+                getBoolean(R.bool.ims_call_type_enabled);
         logCall(call.getCallerInfo(), logNumber, call.getPostDialDigits(), formattedViaNumber,
-                call.getHandlePresentation(), callLogType, callFeatures, accountHandle,
-                creationTime, age, callDataUsage, call.isEmergencyCall(), call.getInitiatingUser(),
-                logCallCompletedListener);
+                call.getHandlePresentation(), imsCallLogEnabled ?
+                toPreciseLogType(call, callLogType) : callLogType, callFeatures,
+                accountHandle, creationTime, age, callDataUsage, call.isEmergencyCall(),
+                call.getInitiatingUser(), logCallCompletedListener);
     }
 
     /**
@@ -478,5 +482,29 @@ public final class CallLogManager extends CallsManagerListenerBase {
             }
             return mCurrentCountryIso;
         }
+    }
+
+    private int toPreciseLogType(Call call, int callLogType) {
+        final boolean isHighDefAudioCall =
+               (call != null) && call.hasProperty(Connection.PROPERTY_HIGH_DEF_AUDIO);
+        Log.d(TAG, "callProperties: " + call.getConnectionProperties()
+                + "isHighDefAudioCall: " + isHighDefAudioCall);
+        if(!isHighDefAudioCall) {
+            return callLogType;
+        }
+        switch (callLogType) {
+            case Calls.INCOMING_TYPE :
+                callLogType = Calls.INCOMING_IMS_TYPE;
+                break;
+            case Calls.OUTGOING_TYPE :
+                callLogType = Calls.OUTGOING_IMS_TYPE;
+                break;
+            case Calls.MISSED_TYPE :
+                callLogType = Calls.MISSED_IMS_TYPE;
+                break;
+            default:
+                //Normal cs call, no change
+        }
+        return callLogType;
     }
 }

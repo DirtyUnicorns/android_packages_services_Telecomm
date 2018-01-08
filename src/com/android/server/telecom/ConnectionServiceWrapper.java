@@ -40,6 +40,7 @@ import android.telecom.PhoneAccountHandle;
 import android.telecom.StatusHints;
 import android.telecom.TelecomManager;
 import android.telecom.VideoProfile;
+import android.telephony.TelephonyManager;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telecom.IConnectionService;
@@ -125,6 +126,26 @@ public class ConnectionServiceWrapper extends ServiceBinder {
                         mCallsManager.markCallAsRinging(call);
                     } else {
                         // Log.w(this, "setRinging, unknown call id: %s", msg.obj);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+                Log.endSession();
+            }
+        }
+
+        @Override
+        public void resetCdmaConnectionTime(String callId, Session.Info sessionInfo) {
+            Log.startSession(sessionInfo, "CSW.rCCT");
+            long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    logIncoming("resetCdmaConnectionTime %s", callId);
+                    Call call = mCallIdMapper.getCall(callId);
+                    if (call != null) {
+                        mCallsManager.resetCdmaConnectionTime(call);
+                    } else {
+                        // Log.w(this, "resetCdmaConnectionTime, unknown call id: %s", msg.obj);
                     }
                 }
             } finally {
@@ -773,6 +794,14 @@ public class ConnectionServiceWrapper extends ServiceBinder {
                     Bundle.setDefusable(extras, true);
                     Call call = mCallIdMapper.getCall(callId);
                     if (call != null) {
+                        if ((extras != null)
+                                    && extras.getParcelable(TelephonyManager.EMR_DIAL_ACCOUNT)
+                                    instanceof PhoneAccountHandle) {
+                            PhoneAccountHandle account = extras.
+                                    getParcelable(TelephonyManager.EMR_DIAL_ACCOUNT);
+                            Log.d(this, "setTargetPhoneAccount, account = " + account);
+                            call.setTargetPhoneAccount(account);
+                        }
                         call.onConnectionEvent(event, extras);
                     }
                 }
@@ -1230,6 +1259,17 @@ public class ConnectionServiceWrapper extends ServiceBinder {
                 mServiceInterface.splitFromConference(callId, Log.getExternalSession());
             } catch (RemoteException ignored) {
             }
+        }
+    }
+
+    void addParticipantWithConference(Call call, String recipients) {
+        final String callId = mCallIdMapper.getCallId(call);
+            if (isServiceValid("addParticipantWithConference")) {
+                try {
+                    logOutgoing("addParticipantWithConference %s, %s", recipients, callId);
+                    mServiceInterface.addParticipantWithConference(callId, recipients);
+                } catch (RemoteException ignored) {
+                }
         }
     }
 

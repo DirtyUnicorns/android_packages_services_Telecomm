@@ -86,6 +86,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import org.codeaurora.ims.QtiCallConstants;
 /**
  * Singleton.
  *
@@ -269,6 +270,14 @@ public class CallsManager extends Call.ListenerBase
     private TelephonyManager.MultiSimVariants mRadioSimVariants = null;
 
     private Runnable mStopTone;
+
+    // Two global variables used to handle the Emergency Call when there
+    // is no room available for emergency call. Buffer the Emergency Call
+    // in mPendingMOEmerCall until the Current Active call is disconnected
+    // successfully and place the mPendingMOEmerCall followed by clearing
+    // buffer.
+    private Call mPendingMOEmerCall = null;
+    private Call mDisconnectingCall = null;
 
     /**
      * Listener to PhoneAccountRegistrar events.
@@ -487,6 +496,9 @@ public class CallsManager extends Call.ListenerBase
                 Log.i(this, "onCallFilteringCompleted: Call rejected! Exceeds maximum number of " +
                         "dialing calls.");
                 rejectCallAndLog(incomingCall);
+            } else if (!isIncomingVideoCallAllowed(incomingCall)) {
+                Log.i(this, "onCallFilteringCompleted: MT Video Call rejecting.");
+                rejectCallAndLog(incomingCall);
             } else {
                 addCall(incomingCall);
             }
@@ -508,6 +520,31 @@ public class CallsManager extends Call.ListenerBase
                         new MissedCallNotifier.CallInfo(incomingCall));
             }
         }
+    }
+
+    /**
+     * Determines if the incoming video call is allowed or not
+     *
+     * @param Call The incoming call.
+     * @return {@code false} if incoming video call is not allowed.
+     */
+    private static boolean isIncomingVideoCallAllowed(Call call) {
+        Bundle extras = call.getExtras();
+        if (extras == null || (!isIncomingVideoCall(call))) {
+            Log.w(TAG, "isIncomingVideoCallAllowed: null Extras or not an incoming video call " +
+                    "or allow video calls in low battery");
+            return true;
+        }
+
+        final boolean isLowBattery = extras.getBoolean(QtiCallConstants.LOW_BATTERY_EXTRA_KEY,
+                false);
+        Log.d(TAG, "isIncomingVideoCallAllowed: lowbattery = " + isLowBattery);
+        return !isLowBattery;
+    }
+
+    private static boolean isIncomingVideoCall(Call call) {
+        return (!VideoProfile.isAudioOnly(call.getVideoState()) &&
+            call.getState() == CallState.RINGING);
     }
 
     /**
@@ -868,8 +905,9 @@ public class CallsManager extends Call.ListenerBase
                     call.putExtras(Call.SOURCE_CONNECTION_SERVICE, dropCallExtras);
                 }
             }
-
-            if (extras.getBoolean(PhoneAccount.EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE)) {
+            if ((phoneAccount.getExtras() != null) &&
+                    phoneAccount.getExtras().getBoolean(
+                            PhoneAccount.EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE)) {
                 Log.d(this, "processIncomingCallIntent: defaulting to voip mode for call %s",
                         call.getId());
                 call.setIsVoipAudioMode(true);
@@ -1050,8 +1088,13 @@ public class CallsManager extends Call.ListenerBase
                     null /* phoneAccountHandle */,
                     Call.CALL_DIRECTION_OUTGOING /* callDirection */,
                     false /* forceAttachToExistingConnection */,
-                    false, /* isConference */
+                    false /* isConference */,
                     mClockProxy);
+            if ((extras != null) &&
+                    extras.getBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false)) {
+                //Reset PostDialDigits with empty string for ConfURI call.
+                call.setPostDialDigits("");
+            }
             call.initAnalytics();
 
             // Ensure new calls related to self-managed calls/connections are set as such.  This
@@ -1101,13 +1144,34 @@ public class CallsManager extends Call.ListenerBase
             call.setVideoState(videoState);
         }
 
+        boolean isAddParticipant = ((extras != null) && (extras.getBoolean(
+                TelephonyProperties.ADD_PARTICIPANT_KEY, false)));
+        boolean isSkipSchemaOrConfUri = ((extras != null) && (extras.getBoolean(
+                TelephonyProperties.EXTRA_SKIP_SCHEMA_PARSING, false) ||
+                extras.getBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false)));
+
+        if (isAddParticipant) {
+            String number = handle.getSchemeSpecificPart();
+            if (!isSkipSchemaOrConfUri) {
+                number = PhoneNumberUtils.stripSeparators(number);
+            }
+            addParticipant(number);
+            mInCallController.bringToForeground(false);
+            return null;
+        }
+        // Force tel scheme for ims conf uri/skip schema calls to avoid selection of sip accounts
+        String scheme = (isSkipSchemaOrConfUri? PhoneAccount.SCHEME_TEL: handle.getScheme());
+
+        Log.d(this, "startOutgoingCall :: isAddParticipant=" + isAddParticipant
+                + " isSkipSchemaOrConfUri=" + isSkipSchemaOrConfUri + " scheme=" + scheme);
+
         PhoneAccount targetPhoneAccount = mPhoneAccountRegistrar.getPhoneAccount(
                 phoneAccountHandle, initiatingUser);
         boolean isSelfManaged = targetPhoneAccount != null && targetPhoneAccount.isSelfManaged();
 
         List<PhoneAccountHandle> accounts;
         if (!isSelfManaged) {
-            accounts = constructPossiblePhoneAccounts(handle, initiatingUser);
+            accounts = constructPossiblePhoneAccounts(handle, initiatingUser, scheme);
             Log.v(this, "startOutgoingCall found accounts = " + accounts);
 
             // Only dial with the requested phoneAccount if it is still valid. Otherwise treat this
@@ -1125,7 +1189,7 @@ public class CallsManager extends Call.ListenerBase
                 if (accounts.size() > 1) {
                     PhoneAccountHandle defaultPhoneAccountHandle =
                             mPhoneAccountRegistrar.getOutgoingPhoneAccountForScheme(
-                                    handle.getScheme(), initiatingUser);
+                                    scheme, initiatingUser);
                     if (defaultPhoneAccountHandle != null &&
                             accounts.contains(defaultPhoneAccountHandle)) {
                         phoneAccountHandle = defaultPhoneAccountHandle;
@@ -1202,8 +1266,11 @@ public class CallsManager extends Call.ListenerBase
             call.setOriginalCallIntent(originalIntent);
             startCallConfirmation(call);
             return null;
-        } else if (!mCalls.contains(call)) {
-            // We check if mCalls already contains the call because we could potentially be reusing
+            // If call is Emergency type and marked it as Pending, call would not be added
+            // in mCalls here. It will be handled when the current active call (mDisconnectingCall)
+            // is disconnected successfully.
+         } else if (!mCalls.contains(call) && mPendingMOEmerCall == null) {
+             // We check if mCalls already contains the call because we could potentially be reusing
             // a call which was previously added (See {@link #reuseOutgoingCall}).
             addCall(call);
         }
@@ -1281,7 +1348,12 @@ public class CallsManager extends Call.ListenerBase
                     disconnectSelfManagedCalls();
                 }
 
-                call.startCreateConnection(mPhoneAccountRegistrar);
+                if (mPendingMOEmerCall == null) {
+                    // If the account has been set, proceed to place the outgoing call.
+                    // Otherwise the connection will be initiated when the account is
+                    // set by the user.
+                    call.startCreateConnection(mPhoneAccountRegistrar);
+                }
             }
         } else if (mPhoneAccountRegistrar.getCallCapablePhoneAccounts(
                 requireCallCapableAccountByHandle ? call.getHandle().getScheme() : null, false,
@@ -1290,6 +1362,22 @@ public class CallsManager extends Call.ListenerBase
             markCallAsDisconnected(call, new DisconnectCause(DisconnectCause.CANCELED,
                     "No registered PhoneAccounts"));
             markCallAsRemoved(call);
+        }
+    }
+
+    /**
+     * Attempts to add participant in a call.
+     *
+     * @param number number to connect the call with.
+     */
+    private void addParticipant(String number) {
+        Log.i(this, "addParticipant number ="+number);
+        if (getForegroundCall() == null) {
+            // don't do anything if the call no longer exists
+            Log.i(this, "Canceling unknown call.");
+            return;
+        } else {
+            getForegroundCall().addParticipantWithConference(number);
         }
     }
 
@@ -1554,6 +1642,14 @@ public class CallsManager extends Call.ListenerBase
     }
 
     @Override
+    public void onExtrasRemoved(Call c, int source, List<String> keys) {
+        if (source != Call.SOURCE_CONNECTION_SERVICE) {
+            return;
+        }
+        updateCanAddCall();
+    }
+
+    @Override
     public void onExtrasChanged(Call c, int source, Bundle extras) {
         if (source != Call.SOURCE_CONNECTION_SERVICE) {
             return;
@@ -1566,12 +1662,16 @@ public class CallsManager extends Call.ListenerBase
     // Construct the list of possible PhoneAccounts that the outgoing call can use based on the
     // active calls in CallsManager. If any of the active calls are on a SIM based PhoneAccount,
     // then include only that SIM based PhoneAccount and any non-SIM PhoneAccounts, such as SIP.
-    private List<PhoneAccountHandle> constructPossiblePhoneAccounts(Uri handle, UserHandle user) {
+    private List<PhoneAccountHandle> constructPossiblePhoneAccounts(Uri handle, UserHandle user,
+            String scheme) {
         if (handle == null) {
             return Collections.emptyList();
         }
+        if (scheme == null) {
+            scheme = handle.getScheme();
+        }
         List<PhoneAccountHandle> allAccounts =
-                mPhoneAccountRegistrar.getCallCapablePhoneAccounts(handle.getScheme(), false, user);
+                mPhoneAccountRegistrar.getCallCapablePhoneAccounts(scheme, false, user);
         // First check the Radio SIM Technology
         if(mRadioSimVariants == null) {
             TelephonyManager tm = (TelephonyManager) mContext.getSystemService(
@@ -1747,6 +1847,14 @@ public class CallsManager extends Call.ListenerBase
     void markCallAsDisconnected(Call call, DisconnectCause disconnectCause) {
         call.setDisconnectCause(disconnectCause);
         setCallState(call, CallState.DISCONNECTED, "disconnected set explicitly");
+        // Emergency MO call is still pending and current active call is
+        // disconnected succesfully. So initiating pending Emergency call
+        // now and clearing both pending and Disconnectcalls.
+        if (mPendingMOEmerCall != null && mDisconnectingCall == call) {
+            addCall(mPendingMOEmerCall);
+            mPendingMOEmerCall.startCreateConnection(mPhoneAccountRegistrar);
+            clearPendingMOEmergencyCall();
+        }
     }
 
     /**
@@ -1864,6 +1972,7 @@ public class CallsManager extends Call.ListenerBase
                     Log.addEvent(callToHangup, LogUtils.Events.INFO,
                             "media btn short press - end call.");
                     if (callToHangup != null) {
+                        mLocallyDisconnectingCalls.add(callToHangup);
                         callToHangup.disconnect();
                         return true;
                     }
@@ -2211,27 +2320,29 @@ public class CallsManager extends Call.ListenerBase
             // into a well-defined state machine.
             // TODO: Define expected state transitions here, and log when an
             // unexpected transition occurs.
-            call.setState(newState, tag);
-            maybeShowErrorDialogOnDisconnect(call);
+            if (!call.setState(newState, tag)) {
+                maybeShowErrorDialogOnDisconnect(call);
 
-            Trace.beginSection("onCallStateChanged");
+                Trace.beginSection("onCallStateChanged");
 
-            maybeHandleHandover(call, newState);
+                maybeHandleHandover(call, newState);
 
-            // Only broadcast state change for calls that are being tracked.
-            if (mCalls.contains(call)) {
-                updateCanAddCall();
-                for (CallsManagerListener listener : mListeners) {
-                    if (LogUtils.SYSTRACE_DEBUG) {
-                        Trace.beginSection(listener.getClass().toString() + " onCallStateChanged");
-                    }
-                    listener.onCallStateChanged(call, oldState, newState);
-                    if (LogUtils.SYSTRACE_DEBUG) {
-                        Trace.endSection();
+                // Only broadcast state change for calls that are being tracked.
+                if (mCalls.contains(call)) {
+                    updateCanAddCall();
+                    for (CallsManagerListener listener : mListeners) {
+                        if (LogUtils.SYSTRACE_DEBUG) {
+                            Trace.beginSection(listener.getClass().toString() +
+                                    " onCallStateChanged");
+                        }
+                        listener.onCallStateChanged(call, oldState, newState);
+                        if (LogUtils.SYSTRACE_DEBUG) {
+                            Trace.endSection();
+                        }
                     }
                 }
+                Trace.endSection();
             }
-            Trace.endSection();
         }
     }
 
@@ -2559,6 +2670,12 @@ public class CallsManager extends Call.ListenerBase
     }
 
     private boolean makeRoomForOutgoingCall(Call call, boolean isEmergency) {
+        // Reject If there is any Incoming Call while initiating an
+        // an Emergency Call.
+        if (isEmergency && hasMaximumManagedRingingCalls(call)) {
+            Call rinigingCall = getRingingCall();
+            rinigingCall.reject(false, null);
+        }
         if (hasMaximumManagedLiveCalls(call)) {
             // NOTE: If the amount of live calls changes beyond 1, this logic will probably
             // have to change.
@@ -2582,6 +2699,10 @@ public class CallsManager extends Call.ListenerBase
                     call.getAnalytics().setCallIsAdditional(true);
                     outgoingCall.getAnalytics().setCallIsInterrupted(true);
                     outgoingCall.disconnect();
+                    // buffer this call in to mPendingMOEmerCall and do not initiate this call
+                    // until the current live call "mDisconnectingCall" is disconnected
+                    // successfully. Emergency Call would be initiated upon receiving the
+                    // Disconnection response from lower layers.
                     return true;
                 }
                 if (outgoingCall.getState() == CallState.SELECT_PHONE_ACCOUNT) {
@@ -2603,6 +2724,8 @@ public class CallsManager extends Call.ListenerBase
                     call.getAnalytics().setCallIsAdditional(true);
                     liveCall.getAnalytics().setCallIsInterrupted(true);
                     liveCall.disconnect();
+                    mDisconnectingCall = liveCall;
+                    mPendingMOEmerCall = call;
                     return true;
                 }
                 return false;  // No more room!
@@ -2725,6 +2848,7 @@ public class CallsManager extends Call.ListenerBase
 
         setCallState(call, Call.getStateFromConnectionState(connection.getState()),
                 "existing connection");
+        call.setVideoState(connection.getVideoState());
         call.setConnectionCapabilities(connection.getConnectionCapabilities());
         call.setConnectionProperties(connection.getConnectionProperties());
         call.setHandle(connection.getHandle(), connection.getHandlePresentation());
@@ -3077,7 +3201,7 @@ public class CallsManager extends Call.ListenerBase
     */
     private void maybeShowErrorDialogOnDisconnect(Call call) {
         if (call.getState() == CallState.DISCONNECTED && (isPotentialMMICode(call.getHandle())
-                || isPotentialInCallMMICode(call.getHandle()))) {
+                || isPotentialInCallMMICode(call.getHandle())) && !mCalls.contains(call)) {
             DisconnectCause disconnectCause = call.getDisconnectCause();
             if (!TextUtils.isEmpty(disconnectCause.getDescription()) && (disconnectCause.getCode()
                     == DisconnectCause.ERROR)) {
@@ -3124,6 +3248,10 @@ public class CallsManager extends Call.ListenerBase
         }
     }
 
+    public void clearPendingMOEmergencyCall() {
+        mPendingMOEmerCall = null;
+        mDisconnectingCall = null;
+    }
     /**
      * Called in response to a {@link Call} receiving a {@link Call#sendCallEvent(String, Bundle)}
      * of type {@link android.telecom.Call#EVENT_REQUEST_HANDOVER} indicating the
@@ -3269,5 +3397,14 @@ public class CallsManager extends Call.ListenerBase
             mContext.sendBroadcastAsUser(directedIntent, UserHandle.ALL, null);
         }
         return ;
+    }
+
+    void resetCdmaConnectionTime(Call call) {
+        call.setConnectTimeMillis(System.currentTimeMillis());
+        if (mCalls.contains(call)) {
+            for (CallsManagerListener listener : mListeners) {
+                listener.onCallStateChanged(call, CallState.ACTIVE, CallState.ACTIVE);
+            }
+        }
     }
 }

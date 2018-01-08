@@ -19,12 +19,14 @@ package com.android.server.telecom;
 import android.annotation.NonNull;
 import android.media.IAudioService;
 import android.media.ToneGenerator;
+import android.os.Bundle;
 import android.telecom.CallAudioState;
 import android.telecom.Log;
 import android.telecom.VideoProfile;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.util.IndentingPrintWriter;
 
 import java.util.Collection;
@@ -111,8 +113,10 @@ public class CallAudioManager extends CallsManagerListenerBase {
             playToneForDisconnectedCall(call);
         }
 
-        onCallLeavingState(call, oldState);
-        onCallEnteringState(call, newState);
+        if (!isIntermediateConfURICallDisconnected(call)) {
+            onCallLeavingState(call, oldState);
+            onCallEnteringState(call, newState);
+        }
     }
 
     @Override
@@ -218,18 +222,16 @@ public class CallAudioManager extends CallsManagerListenerBase {
         // sets the call to active. Only thing to handle for mode here is the audio speedup thing.
 
         if (call.can(android.telecom.Call.Details.CAPABILITY_SPEED_UP_MT_AUDIO)) {
-            if (mForegroundCall == call) {
-                Log.i(LOG_TAG, "Invoking the MT_AUDIO_SPEEDUP mechanism. Transitioning into " +
-                        "an active in-call audio state before connection service has " +
-                        "connected the call.");
-                if (mCallStateToCalls.get(call.getState()) != null) {
-                    mCallStateToCalls.get(call.getState()).remove(call);
-                }
-                mActiveDialingOrConnectingCalls.add(call);
-                mCallAudioModeStateMachine.sendMessageWithArgs(
-                        CallAudioModeStateMachine.MT_AUDIO_SPEEDUP_FOR_RINGING_CALL,
-                        makeArgsForModeStateMachine());
+            Log.i(LOG_TAG, "Invoking the MT_AUDIO_SPEEDUP mechanism. Transitioning into " +
+                    "an active in-call audio state before connection service has " +
+                    "connected the call.");
+            if (mCallStateToCalls.get(call.getState()) != null) {
+                mCallStateToCalls.get(call.getState()).remove(call);
             }
+            mActiveDialingOrConnectingCalls.add(call);
+            mCallAudioModeStateMachine.sendMessageWithArgs(
+                    CallAudioModeStateMachine.MT_AUDIO_SPEEDUP_FOR_RINGING_CALL,
+                    makeArgsForModeStateMachine());
         }
 
         // Turn off mute when a new incoming call is answered iff it's not a handover.
@@ -259,7 +261,7 @@ public class CallAudioManager extends CallsManagerListenerBase {
         boolean isUpgradeRequest = !VideoProfile.isReceptionEnabled(previousVideoState) &&
                 VideoProfile.isReceptionEnabled(newVideoState);
 
-        if (isUpgradeRequest) {
+        if (call.getState() != CallState.DIALING && isUpgradeRequest) {
             mPlayerFactory.createPlayer(InCallTonePlayer.TONE_VIDEO_UPGRADE).startTone();
         }
     }
@@ -314,7 +316,10 @@ public class CallAudioManager extends CallsManagerListenerBase {
         } else {
             // The call joined a conference, so stop tracking it.
             if (mCallStateToCalls.get(call.getState()) != null) {
-                mCallStateToCalls.get(call.getState()).remove(call);
+                boolean isRemoveCallSuccess = mCallStateToCalls.get(call.getState()).remove(call);
+                if (!isRemoveCallSuccess) {
+                    mActiveDialingOrConnectingCalls.remove(call);
+                }
             }
 
             updateForegroundCall();
@@ -361,6 +366,19 @@ public class CallAudioManager extends CallsManagerListenerBase {
             return mForegroundCall;
         }
         return null;
+    }
+
+    private boolean isIntermediateConfURICallDisconnected(Call disconnectedCall) {
+        if(disconnectedCall.getState() != CallState.DISCONNECTED) {
+            return false;
+        }
+        Bundle callExtra = (disconnectedCall != null) ? disconnectedCall.getIntentExtras() : null;
+        final boolean isMoConfURICallDisconnected = (callExtra == null) ? false :
+                !disconnectedCall.isIncoming() &&
+                callExtra.getBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false);
+        Log.i(this, "is ConfURI call disconnected = " + isMoConfURICallDisconnected + " call = "
+                + disconnectedCall);
+        return isMoConfURICallDisconnected && !mCallsManager.hasOnlyDisconnectedCalls();
     }
 
     void toggleMute() {

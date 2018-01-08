@@ -234,7 +234,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
     /**
      * The post-dial digits that were dialed after the network portion of the number
      */
-    private final String mPostDialDigits;
+    private String mPostDialDigits;
 
     /**
      * The secondary line number that an incoming call has been received on if the SIM subscription
@@ -796,15 +796,16 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
      * (see {@link CallState}), in practice those expectations break down when cellular systems
      * misbehave and they do this very often. The result is that we do not enforce state transitions
      * and instead keep the code resilient to unexpected state changes.
+     * @return Whether the call is continuing to try
      */
-    public void setState(int newState, String tag) {
+    public boolean setState(int newState, String tag) {
         if (mState != newState) {
             Log.v(this, "setState %s -> %s", mState, newState);
 
             if (newState == CallState.DISCONNECTED && shouldContinueProcessingAfterDisconnect()) {
                 Log.w(this, "continuing processing disconnected call with another service");
                 mCreateConnectionProcessor.continueProcessingIfPossible(this, mDisconnectCause);
-                return;
+                return true;
             }
 
             updateVideoHistoryViaState(mState, newState);
@@ -876,6 +877,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
                 Log.addEvent(this, event, stringData);
             }
         }
+        return false;
     }
 
     void setRingbackRequested(boolean ringbackRequested) {
@@ -896,6 +898,10 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
 
     public Uri getHandle() {
         return mHandle;
+    }
+
+    public void setPostDialDigits(String postDialDigits) {
+        mPostDialDigits = postDialDigits;
     }
 
     public String getPostDialDigits() {
@@ -1269,6 +1275,10 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
 
     long getConnectTimeMillis() {
         return mConnectTimeMillis;
+    }
+
+    public void setConnectTimeMillis(long connectTimeMillis) {
+        mConnectTimeMillis = connectTimeMillis;
     }
 
     int getConnectionCapabilities() {
@@ -1921,6 +1931,14 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
         }
     }
 
+    void addParticipantWithConference(String recipients) {
+        if (mConnectionService == null) {
+            Log.w(this, "conference requested on a call without a connection service.");
+        } else {
+            mConnectionService.addParticipantWithConference(this, recipients);
+        }
+    }
+
     @VisibleForTesting
     public void mergeConference() {
         if (mConnectionService == null) {
@@ -2439,6 +2457,11 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
     public void setVideoProvider(IVideoProvider videoProvider) {
         Log.v(this, "setVideoProvider");
 
+        if (mVideoProviderProxy != null) {
+            mVideoProviderProxy.clearVideoCallback();
+            mVideoProviderProxy = null;
+        }
+
         if (videoProvider != null ) {
             try {
                 mVideoProviderProxy = new VideoProviderProxy(mLock, videoProvider, this,
@@ -2446,8 +2469,6 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
             } catch (RemoteException ignored) {
                 // Ignore RemoteException.
             }
-        } else {
-            mVideoProviderProxy = null;
         }
 
         mVideoProvider = videoProvider;
