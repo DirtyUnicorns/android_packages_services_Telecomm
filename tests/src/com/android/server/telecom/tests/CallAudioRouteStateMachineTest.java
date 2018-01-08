@@ -16,6 +16,7 @@
 
 package com.android.server.telecom.tests;
 
+import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.media.AudioManager;
 import android.media.IAudioService;
@@ -43,13 +44,18 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
@@ -62,17 +68,28 @@ public class CallAudioRouteStateMachineTest
     private static final int NONE = 0;
     private static final int ON = 1;
     private static final int OFF = 2;
+    private static final int OPTIONAL = 3;
+
+    private static final BluetoothDevice bluetoothDevice1 =
+            BluetoothRouteManagerTest.makeBluetoothDevice("00:00:00:00:00:01");
+    private static final BluetoothDevice bluetoothDevice2 =
+            BluetoothRouteManagerTest.makeBluetoothDevice("00:00:00:00:00:02");
+    private static final BluetoothDevice bluetoothDevice3 =
+            BluetoothRouteManagerTest.makeBluetoothDevice("00:00:00:00:00:03");
 
     static class RoutingTestParameters extends TestParameters {
         public String name;
         public int initialRoute;
+        public BluetoothDevice initialBluetoothDevice = null;
         public int availableRoutes; // may excl. speakerphone, because that's always available
+        public List<BluetoothDevice> availableBluetoothDevices = Collections.emptyList();
         public int speakerInteraction; // one of NONE, ON, or OFF
         public int bluetoothInteraction; // one of NONE, ON, or OFF
         public int action;
         public int expectedRoute;
+        public BluetoothDevice expectedBluetoothDevice = null;
         public int expectedAvailableRoutes; // also may exclude the speakerphone.
-        public boolean doesDeviceSupportEarpiece; // set to false in the case of Wear devices
+        public int earpieceControl; // Allows disabling the earpiece to simulate Wear or Car
         public boolean shouldRunWithFocus;
 
         public int callSupportedRoutes = CallAudioState.ROUTE_ALL;
@@ -80,7 +97,7 @@ public class CallAudioRouteStateMachineTest
         public RoutingTestParameters(String name, int initialRoute,
                 int availableRoutes, int speakerInteraction,
                 int bluetoothInteraction, int action, int expectedRoute,
-                int expectedAvailableRoutes, boolean doesDeviceSupportEarpiece,
+                int expectedAvailableRoutes, int earpieceControl,
                 boolean shouldRunWithFocus) {
             this.name = name;
             this.initialRoute = initialRoute;
@@ -90,12 +107,27 @@ public class CallAudioRouteStateMachineTest
             this.action = action;
             this.expectedRoute = expectedRoute;
             this.expectedAvailableRoutes = expectedAvailableRoutes;
-            this.doesDeviceSupportEarpiece = doesDeviceSupportEarpiece;
+            this.earpieceControl = earpieceControl;
             this.shouldRunWithFocus = shouldRunWithFocus;
         }
 
         public RoutingTestParameters setCallSupportedRoutes(int routes) {
             callSupportedRoutes = routes;
+            return this;
+        }
+
+        public RoutingTestParameters setInitialBluetoothDevice(BluetoothDevice device) {
+            initialBluetoothDevice = device;
+            return this;
+        }
+
+        public RoutingTestParameters setAvailableBluetoothDevices(BluetoothDevice... devices) {
+            availableBluetoothDevices = Arrays.asList(devices);
+            return this;
+        }
+
+        public RoutingTestParameters setExpectedBluetoothDevice(BluetoothDevice device) {
+            expectedBluetoothDevice = device;
             return this;
         }
 
@@ -110,7 +142,7 @@ public class CallAudioRouteStateMachineTest
                     ", action=" + action +
                     ", expectedRoute=" + expectedRoute +
                     ", expectedAvailableRoutes=" + expectedAvailableRoutes +
-                    ", doesDeviceSupportEarpiece=" + doesDeviceSupportEarpiece +
+                    ", earpieceControl=" + earpieceControl +
                     ", shouldRunWithFocus=" + shouldRunWithFocus +
                     '}';
         }
@@ -154,6 +186,23 @@ public class CallAudioRouteStateMachineTest
                 any(CallAudioState.class));
     }
 
+    @SmallTest
+    public void testEarpieceAutodetect() {
+        CallAudioRouteStateMachine stateMachine = new CallAudioRouteStateMachine(
+                mContext,
+                mockCallsManager,
+                mockBluetoothRouteManager,
+                mockWiredHeadsetManager,
+                mockStatusBarNotifier,
+                mAudioServiceFactory,
+                CallAudioRouteStateMachine.EARPIECE_AUTO_DETECT);
+
+        // Since we don't know if we're on a platform with an earpiece or not, all we can do
+        // is ensure the stateMachine construction didn't fail.  But at least we exercised the
+        // autodetection code...
+        assertNotNull(stateMachine);
+    }
+
     @LargeTest
     public void testStateMachineTransitionsWithFocus() throws Throwable {
         List<RoutingTestParameters> paramList = generateTransitionTests(true);
@@ -175,7 +224,7 @@ public class CallAudioRouteStateMachineTest
                 mockWiredHeadsetManager,
                 mockStatusBarNotifier,
                 mAudioServiceFactory,
-                true);
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
 
         when(mockBluetoothRouteManager.isBluetoothAudioConnectedOrPending()).thenReturn(false);
         when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(true);
@@ -201,10 +250,11 @@ public class CallAudioRouteStateMachineTest
         waitForHandlerAction(stateMachine.getHandler(), TEST_TIMEOUT);
         waitForHandlerAction(stateMachine.getHandler(), TEST_TIMEOUT);
         verifyNewSystemCallAudioState(initState, expectedMiddleState);
-        resetMocks(true);
+        resetMocks();
 
         stateMachine.sendMessageWithSessionInfo(
                 CallAudioRouteStateMachine.DISCONNECT_WIRED_HEADSET);
+        waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
         verifyNewSystemCallAudioState(expectedMiddleState, initState);
     }
 
@@ -217,7 +267,7 @@ public class CallAudioRouteStateMachineTest
                 mockWiredHeadsetManager,
                 mockStatusBarNotifier,
                 mAudioServiceFactory,
-                true);
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
 
         when(mockBluetoothRouteManager.isBluetoothAudioConnectedOrPending()).thenReturn(false);
         when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(true);
@@ -239,13 +289,84 @@ public class CallAudioRouteStateMachineTest
 
         waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
         verifyNewSystemCallAudioState(initState, expectedEndState);
-        resetMocks(false);
+        resetMocks();
         stateMachine.sendMessageWithSessionInfo(
                 CallAudioRouteStateMachine.DISCONNECT_BLUETOOTH);
         stateMachine.sendMessageWithSessionInfo(
                 CallAudioRouteStateMachine.CONNECT_BLUETOOTH);
 
         waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
+        assertEquals(expectedEndState, stateMachine.getCurrentCallAudioState());
+    }
+
+    @MediumTest
+    public void testUserBluetoothSwitchOffAndOnAgain() {
+        CallAudioRouteStateMachine stateMachine = new CallAudioRouteStateMachine(
+                mContext,
+                mockCallsManager,
+                mockBluetoothRouteManager,
+                mockWiredHeadsetManager,
+                mockStatusBarNotifier,
+                mAudioServiceFactory,
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
+        Collection<BluetoothDevice> availableDevices = Collections.singleton(bluetoothDevice1);
+
+        when(mockBluetoothRouteManager.isBluetoothAudioConnectedOrPending()).thenReturn(false);
+        when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(true);
+        when(mockBluetoothRouteManager.getConnectedDevices()).thenReturn(availableDevices);
+
+        CallAudioState initState = new CallAudioState(false, CallAudioState.ROUTE_BLUETOOTH,
+                CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH);
+        stateMachine.initialize(initState);
+
+        stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.SWITCH_FOCUS,
+                CallAudioRouteStateMachine.ACTIVE_FOCUS);
+        stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.BT_AUDIO_CONNECTED);
+
+        // Switch off the BT route explicitly.
+        stateMachine.sendMessageWithSessionInfo(
+                CallAudioRouteStateMachine.USER_SWITCH_BASELINE_ROUTE,
+                CallAudioRouteStateMachine.NO_INCLUDE_BLUETOOTH_IN_BASELINE);
+        CallAudioState expectedMidState = new CallAudioState(false,
+                CallAudioState.ROUTE_EARPIECE,
+                CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH,
+                null, availableDevices);
+
+        waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
+        verifyNewSystemCallAudioState(initState, expectedMidState);
+        resetMocks();
+
+        // Now, switch back to BT explicitly
+        when(mockBluetoothRouteManager.isBluetoothAudioConnectedOrPending()).thenReturn(false);
+        when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(true);
+        when(mockBluetoothRouteManager.getConnectedDevices()).thenReturn(availableDevices);
+        doAnswer(invocation -> {
+            when(mockBluetoothRouteManager.getBluetoothAudioConnectedDevice())
+                    .thenReturn(bluetoothDevice1);
+            stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.BT_AUDIO_CONNECTED);
+            return null;
+        }).when(mockBluetoothRouteManager).connectBluetoothAudio(nullable(String.class));
+        stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.USER_SWITCH_BLUETOOTH);
+        CallAudioState expectedEndState = new CallAudioState(false,
+                CallAudioState.ROUTE_BLUETOOTH,
+                CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH,
+                bluetoothDevice1, availableDevices);
+        waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
+        // second wait needed for the BT_AUDIO_CONNECTED message
+        waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
+        verifyNewSystemCallAudioState(expectedMidState, expectedEndState);
+
+        stateMachine.sendMessageWithSessionInfo(
+                CallAudioRouteStateMachine.DISCONNECT_BLUETOOTH);
+        when(mockBluetoothRouteManager.getBluetoothAudioConnectedDevice())
+                .thenReturn(null);
+        stateMachine.sendMessageWithSessionInfo(
+                CallAudioRouteStateMachine.CONNECT_BLUETOOTH);
+
+        waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
+        // second wait needed for the BT_AUDIO_CONNECTED message
+        waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
+        // Verify that we're still on bluetooth.
         assertEquals(expectedEndState, stateMachine.getCurrentCallAudioState());
     }
 
@@ -258,10 +379,12 @@ public class CallAudioRouteStateMachineTest
                 mockWiredHeadsetManager,
                 mockStatusBarNotifier,
                 mAudioServiceFactory,
-                true);
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
 
         when(mockBluetoothRouteManager.isBluetoothAudioConnectedOrPending()).thenReturn(false);
         when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(true);
+        when(mockBluetoothRouteManager.getConnectedDevices())
+                .thenReturn(Collections.singletonList(bluetoothDevice1));
         when(mockAudioManager.isSpeakerphoneOn()).thenReturn(false);
 
         CallAudioState initState = new CallAudioState(false, CallAudioState.ROUTE_BLUETOOTH,
@@ -272,12 +395,12 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.RINGING_FOCUS);
         waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
 
-        verify(mockBluetoothRouteManager, never()).connectBluetoothAudio(null);
+        verify(mockBluetoothRouteManager, never()).connectBluetoothAudio(nullable(String.class));
 
         stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.SWITCH_FOCUS,
                 CallAudioRouteStateMachine.ACTIVE_FOCUS);
         waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
-        verify(mockBluetoothRouteManager, times(1)).connectBluetoothAudio(null);
+        verify(mockBluetoothRouteManager, times(1)).connectBluetoothAudio(nullable(String.class));
     }
 
     @MediumTest
@@ -289,8 +412,8 @@ public class CallAudioRouteStateMachineTest
                 mockWiredHeadsetManager,
                 mockStatusBarNotifier,
                 mAudioServiceFactory,
-                true);
-
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
+        setInBandRing(false);
         when(mockBluetoothRouteManager.isBluetoothAudioConnectedOrPending()).thenReturn(false);
         when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(false);
         when(mockAudioManager.isSpeakerphoneOn()).thenReturn(false);
@@ -300,15 +423,23 @@ public class CallAudioRouteStateMachineTest
 
         stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.SWITCH_FOCUS,
                 CallAudioRouteStateMachine.RINGING_FOCUS);
+        // Wait for the state machine to finish transiting to ActiveEarpiece before hooking up
+        // bluetooth mocks
+        waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
 
         when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(true);
+        when(mockBluetoothRouteManager.getConnectedDevices())
+                .thenReturn(Collections.singletonList(bluetoothDevice1));
+        stateMachine.sendMessageWithSessionInfo(
+                CallAudioRouteStateMachine.BLUETOOTH_DEVICE_LIST_CHANGED);
         stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.CONNECT_BLUETOOTH);
         waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
 
         verify(mockBluetoothRouteManager, never()).connectBluetoothAudio(null);
         CallAudioState expectedEndState = new CallAudioState(false,
                 CallAudioState.ROUTE_BLUETOOTH,
-                CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH);
+                CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH,
+                null, Collections.singletonList(bluetoothDevice1));
         verifyNewSystemCallAudioState(initState, expectedEndState);
 
         stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.SWITCH_FOCUS,
@@ -318,17 +449,64 @@ public class CallAudioRouteStateMachineTest
     }
 
     @SmallTest
+    public void testConnectSpecificBluetoothDevice() {
+        CallAudioRouteStateMachine stateMachine = new CallAudioRouteStateMachine(
+                mContext,
+                mockCallsManager,
+                mockBluetoothRouteManager,
+                mockWiredHeadsetManager,
+                mockStatusBarNotifier,
+                mAudioServiceFactory,
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
+        List<BluetoothDevice> availableDevices =
+                Arrays.asList(bluetoothDevice1, bluetoothDevice2, bluetoothDevice3);
+
+        when(mockAudioManager.isSpeakerphoneOn()).thenReturn(false);
+        when(mockBluetoothRouteManager.isBluetoothAudioConnectedOrPending()).thenReturn(false);
+        when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(true);
+        when(mockBluetoothRouteManager.getConnectedDevices()).thenReturn(availableDevices);
+        doAnswer(invocation -> {
+            when(mockBluetoothRouteManager.getBluetoothAudioConnectedDevice())
+                    .thenReturn(bluetoothDevice2);
+            stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.BT_AUDIO_CONNECTED);
+            return null;
+        }).when(mockBluetoothRouteManager).connectBluetoothAudio(bluetoothDevice2.getAddress());
+
+        CallAudioState initState = new CallAudioState(false, CallAudioState.ROUTE_EARPIECE,
+                CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, null,
+                availableDevices);
+        stateMachine.initialize(initState);
+
+        stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.SWITCH_FOCUS,
+                CallAudioRouteStateMachine.ACTIVE_FOCUS);
+
+        stateMachine.sendMessageWithSessionInfo(CallAudioRouteStateMachine.USER_SWITCH_BLUETOOTH,
+                0, bluetoothDevice2.getAddress());
+        waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
+
+        verify(mockBluetoothRouteManager).connectBluetoothAudio(bluetoothDevice2.getAddress());
+        waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
+        CallAudioState expectedEndState = new CallAudioState(false,
+                CallAudioState.ROUTE_BLUETOOTH,
+                CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH,
+                bluetoothDevice2,
+                availableDevices);
+
+        verifyNewSystemCallAudioState(initState, expectedEndState);
+    }
+
+    @SmallTest
     public void testInitializationWithEarpieceNoHeadsetNoBluetooth() {
         CallAudioState expectedState = new CallAudioState(false, CallAudioState.ROUTE_EARPIECE,
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_SPEAKER);
-        initializationTestHelper(expectedState, true);
+        initializationTestHelper(expectedState, CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
     }
 
     @SmallTest
     public void testInitializationWithEarpieceAndHeadsetNoBluetooth() {
         CallAudioState expectedState = new CallAudioState(false, CallAudioState.ROUTE_WIRED_HEADSET,
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_SPEAKER);
-        initializationTestHelper(expectedState, true);
+        initializationTestHelper(expectedState, CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
     }
 
     @SmallTest
@@ -336,7 +514,7 @@ public class CallAudioRouteStateMachineTest
         CallAudioState expectedState = new CallAudioState(false, CallAudioState.ROUTE_BLUETOOTH,
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_SPEAKER
                 | CallAudioState.ROUTE_BLUETOOTH);
-        initializationTestHelper(expectedState, true);
+        initializationTestHelper(expectedState, CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
     }
 
     @SmallTest
@@ -344,21 +522,21 @@ public class CallAudioRouteStateMachineTest
         CallAudioState expectedState = new CallAudioState(false, CallAudioState.ROUTE_BLUETOOTH,
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_SPEAKER
                         | CallAudioState.ROUTE_BLUETOOTH);
-        initializationTestHelper(expectedState, true);
+        initializationTestHelper(expectedState, CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED);
     }
 
     @SmallTest
     public void testInitializationWithNoEarpieceNoHeadsetNoBluetooth() {
         CallAudioState expectedState = new CallAudioState(false, CallAudioState.ROUTE_SPEAKER,
                 CallAudioState.ROUTE_SPEAKER);
-        initializationTestHelper(expectedState, false);
+        initializationTestHelper(expectedState, CallAudioRouteStateMachine.EARPIECE_FORCE_DISABLED);
     }
 
     @SmallTest
     public void testInitializationWithHeadsetNoBluetoothNoEarpiece() {
         CallAudioState expectedState = new CallAudioState(false, CallAudioState.ROUTE_WIRED_HEADSET,
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_SPEAKER);
-        initializationTestHelper(expectedState, false);
+        initializationTestHelper(expectedState, CallAudioRouteStateMachine.EARPIECE_FORCE_DISABLED);
     }
 
     @SmallTest
@@ -366,18 +544,18 @@ public class CallAudioRouteStateMachineTest
         CallAudioState expectedState = new CallAudioState(false, CallAudioState.ROUTE_BLUETOOTH,
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_SPEAKER
                 | CallAudioState.ROUTE_BLUETOOTH);
-        initializationTestHelper(expectedState, false);
+        initializationTestHelper(expectedState, CallAudioRouteStateMachine.EARPIECE_FORCE_DISABLED);
     }
 
     @SmallTest
     public void testInitializationWithBluetoothNoHeadsetNoEarpiece() {
         CallAudioState expectedState = new CallAudioState(false, CallAudioState.ROUTE_BLUETOOTH,
                 CallAudioState.ROUTE_SPEAKER | CallAudioState.ROUTE_BLUETOOTH);
-        initializationTestHelper(expectedState, false);
+        initializationTestHelper(expectedState, CallAudioRouteStateMachine.EARPIECE_FORCE_DISABLED);
     }
 
     private void initializationTestHelper(CallAudioState expectedState,
-            boolean doesDeviceSupportEarpiece) {
+            int earpieceControl) {
         when(mockWiredHeadsetManager.isPluggedIn()).thenReturn(
                 (expectedState.getSupportedRouteMask() & CallAudioState.ROUTE_WIRED_HEADSET) != 0);
         when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(
@@ -390,7 +568,7 @@ public class CallAudioRouteStateMachineTest
                 mockWiredHeadsetManager,
                 mockStatusBarNotifier,
                 mAudioServiceFactory,
-                doesDeviceSupportEarpiece);
+                earpieceControl);
         stateMachine.initialize();
         assertEquals(expectedState, stateMachine.getCurrentCallAudioState());
     }
@@ -401,12 +579,12 @@ public class CallAudioRouteStateMachineTest
                 "Connect headset during earpiece", // name
                 CallAudioState.ROUTE_EARPIECE, // initialRoute
                 CallAudioState.ROUTE_EARPIECE, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 NONE, // bluetoothInteraction
                 CallAudioRouteStateMachine.CONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_WIRED_HEADSET, // expectedRoute
                 CallAudioState.ROUTE_WIRED_HEADSET, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -414,12 +592,12 @@ public class CallAudioRouteStateMachineTest
                 "Connect headset during bluetooth", // name
                 CallAudioState.ROUTE_BLUETOOTH, // initialRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 OFF, // bluetoothInteraction
                 CallAudioRouteStateMachine.CONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_WIRED_HEADSET, // expectedRoute
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_BLUETOOTH, // expectedAvai
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -432,7 +610,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.CONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_WIRED_HEADSET, // expectedRoute
                 CallAudioState.ROUTE_WIRED_HEADSET, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -440,12 +618,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect headset during headset", // name
                 CallAudioState.ROUTE_WIRED_HEADSET, // initialRoute
                 CallAudioState.ROUTE_WIRED_HEADSET, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 NONE, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_EARPIECE, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -453,12 +631,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect headset during headset with bluetooth available", // name
                 CallAudioState.ROUTE_WIRED_HEADSET, // initialRoute
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_BLUETOOTH, // availableRou
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 ON, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_BLUETOOTH, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // expectedAvailable
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -466,12 +644,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect headset during bluetooth", // name
                 CallAudioState.ROUTE_BLUETOOTH, // initialRoute
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_BLUETOOTH, // availableRou
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 NONE, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_BLUETOOTH, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // expectedAvailable
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -479,12 +657,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect headset during speakerphone", // name
                 CallAudioState.ROUTE_SPEAKER, // initialRoute
                 CallAudioState.ROUTE_WIRED_HEADSET, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 NONE, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -492,12 +670,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect headset during speakerphone with bluetooth available", // name
                 CallAudioState.ROUTE_SPEAKER, // initialRoute
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_BLUETOOTH, // availableRou
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 NONE, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // expectedAvailable
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -505,12 +683,12 @@ public class CallAudioRouteStateMachineTest
                 "Connect bluetooth during earpiece", // name
                 CallAudioState.ROUTE_EARPIECE, // initialRoute
                 CallAudioState.ROUTE_EARPIECE, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 ON, // bluetoothInteraction
                 CallAudioRouteStateMachine.CONNECT_BLUETOOTH, // action
                 CallAudioState.ROUTE_BLUETOOTH, // expectedRoute
                 CallAudioState.ROUTE_BLUETOOTH | CallAudioState.ROUTE_EARPIECE, // expectedAvailable
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -518,12 +696,12 @@ public class CallAudioRouteStateMachineTest
                 "Connect bluetooth during wired headset", // name
                 CallAudioState.ROUTE_WIRED_HEADSET, // initialRoute
                 CallAudioState.ROUTE_WIRED_HEADSET, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 ON, // bluetoothInteraction
                 CallAudioRouteStateMachine.CONNECT_BLUETOOTH, // action
                 CallAudioState.ROUTE_BLUETOOTH, // expectedRoute
                 CallAudioState.ROUTE_BLUETOOTH | CallAudioState.ROUTE_WIRED_HEADSET, // expectedAvai
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -536,7 +714,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.CONNECT_BLUETOOTH, // action
                 CallAudioState.ROUTE_BLUETOOTH, // expectedRoute
                 CallAudioState.ROUTE_BLUETOOTH | CallAudioState.ROUTE_EARPIECE, // expectedAvailable
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -544,12 +722,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect bluetooth during bluetooth without headset in", // name
                 CallAudioState.ROUTE_BLUETOOTH, // initialRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 OFF, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_BLUETOOTH, // action
                 CallAudioState.ROUTE_EARPIECE, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -557,12 +735,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect bluetooth during bluetooth without headset in, priority mode ", // name
                 CallAudioState.ROUTE_BLUETOOTH, // initialRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 OFF, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_BLUETOOTH, // action
                 CallAudioState.ROUTE_EARPIECE, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -570,12 +748,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect bluetooth during bluetooth with headset in", // name
                 CallAudioState.ROUTE_BLUETOOTH, // initialRoute
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_BLUETOOTH, // availableRou
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 OFF, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_BLUETOOTH, // action
                 CallAudioState.ROUTE_WIRED_HEADSET, // expectedRoute
                 CallAudioState.ROUTE_WIRED_HEADSET, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -583,12 +761,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect bluetooth during speakerphone", // name
                 CallAudioState.ROUTE_SPEAKER, // initialRoute
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_BLUETOOTH, // availableRou
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 NONE, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_BLUETOOTH, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_WIRED_HEADSET, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -596,12 +774,12 @@ public class CallAudioRouteStateMachineTest
                 "Disconnect bluetooth during earpiece", // name
                 CallAudioState.ROUTE_EARPIECE, // initialRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 NONE, // bluetoothInteraction
                 CallAudioRouteStateMachine.DISCONNECT_BLUETOOTH, // action
                 CallAudioState.ROUTE_EARPIECE, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -614,7 +792,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.SWITCH_SPEAKER, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -627,7 +805,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.SWITCH_SPEAKER, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_WIRED_HEADSET, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -640,7 +818,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.SWITCH_SPEAKER, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_BLUETOOTH, // expectedAvai
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -648,12 +826,12 @@ public class CallAudioRouteStateMachineTest
                 "Switch to earpiece from bluetooth", // name
                 CallAudioState.ROUTE_BLUETOOTH, // initialRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 OFF, // bluetoothInteraction
                 CallAudioRouteStateMachine.SWITCH_EARPIECE, // action
                 CallAudioState.ROUTE_EARPIECE, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // expectedAvailable
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -666,7 +844,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.SWITCH_EARPIECE, // action
                 CallAudioState.ROUTE_EARPIECE, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -679,7 +857,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.SWITCH_EARPIECE, // action
                 CallAudioState.ROUTE_EARPIECE, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -692,7 +870,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.SWITCH_EARPIECE, // action
                 CallAudioState.ROUTE_EARPIECE, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -705,7 +883,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.SWITCH_BLUETOOTH, // action
                 CallAudioState.ROUTE_BLUETOOTH, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // expectedAvailable
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -713,12 +891,12 @@ public class CallAudioRouteStateMachineTest
                 "Switch to bluetooth from earpiece", // name
                 CallAudioState.ROUTE_EARPIECE, // initialRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // availableRoutes
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 ON, // bluetoothInteraction
                 CallAudioRouteStateMachine.SWITCH_BLUETOOTH, // action
                 CallAudioState.ROUTE_BLUETOOTH, // expectedRoute
                 CallAudioState.ROUTE_EARPIECE | CallAudioState.ROUTE_BLUETOOTH, // expectedAvailable
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -726,12 +904,12 @@ public class CallAudioRouteStateMachineTest
                 "Switch to bluetooth from wired headset", // name
                 CallAudioState.ROUTE_WIRED_HEADSET, // initialRoute
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_BLUETOOTH, // availableRou
-                NONE, // speakerInteraction
+                OPTIONAL, // speakerInteraction
                 ON, // bluetoothInteraction
                 CallAudioRouteStateMachine.SWITCH_BLUETOOTH, // action
                 CallAudioState.ROUTE_BLUETOOTH, // expectedRoute
                 CallAudioState.ROUTE_WIRED_HEADSET | CallAudioState.ROUTE_BLUETOOTH, // expectedAvai
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -744,7 +922,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.SWITCH_BASELINE_ROUTE, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_BLUETOOTH, // expectedAvailableRoutes
-                false, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_DISABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -757,7 +935,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.DISCONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_SPEAKER, // expectedAvailableRoutes
-                false, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_DISABLED, // earpieceControl
                 shouldRunWithFocus
         ));
 
@@ -770,7 +948,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.DISCONNECT_WIRED_HEADSET, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_SPEAKER, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ).setCallSupportedRoutes(CallAudioState.ROUTE_ALL & ~CallAudioState.ROUTE_EARPIECE));
 
@@ -783,7 +961,7 @@ public class CallAudioRouteStateMachineTest
                 CallAudioRouteStateMachine.DISCONNECT_BLUETOOTH, // action
                 CallAudioState.ROUTE_SPEAKER, // expectedRoute
                 CallAudioState.ROUTE_SPEAKER, // expectedAvailableRoutes
-                true, // doesDeviceSupportEarpiece
+                CallAudioRouteStateMachine.EARPIECE_FORCE_ENABLED, // earpieceControl
                 shouldRunWithFocus
         ).setCallSupportedRoutes(CallAudioState.ROUTE_ALL & ~CallAudioState.ROUTE_EARPIECE));
 
@@ -802,7 +980,7 @@ public class CallAudioRouteStateMachineTest
 
     private void runParametrizedTestCaseWithFocus(final RoutingTestParameters params)
             throws Throwable {
-        resetMocks(true);
+        resetMocks();
 
         // Construct a fresh state machine on every case
         final CallAudioRouteStateMachine stateMachine = new CallAudioRouteStateMachine(
@@ -812,7 +990,7 @@ public class CallAudioRouteStateMachineTest
                 mockWiredHeadsetManager,
                 mockStatusBarNotifier,
                 mAudioServiceFactory,
-                params.doesDeviceSupportEarpiece);
+                params.earpieceControl);
 
         setupMocksForParams(stateMachine, params);
 
@@ -831,7 +1009,7 @@ public class CallAudioRouteStateMachineTest
         waitForStateMachineActionCompletion(stateMachine, CallAudioRouteStateMachine.RUN_RUNNABLE);
 
         // Reset mocks one more time to discard stuff from initialization
-        resetMocks(false);
+        resetMocks();
         setupMocksForParams(stateMachine, params);
         stateMachine.sendMessageWithSessionInfo(params.action);
 
@@ -846,16 +1024,26 @@ public class CallAudioRouteStateMachineTest
         switch (params.bluetoothInteraction) {
             case NONE:
                 verify(mockBluetoothRouteManager, never()).disconnectBluetoothAudio();
-                verify(mockBluetoothRouteManager, never()).connectBluetoothAudio(null);
+                verify(mockBluetoothRouteManager, never())
+                        .connectBluetoothAudio(nullable(String.class));
                 break;
             case ON:
-                verify(mockBluetoothRouteManager).connectBluetoothAudio(null);
-
+                if (params.expectedBluetoothDevice == null) {
+                    verify(mockBluetoothRouteManager).connectBluetoothAudio(null);
+                } else {
+                    verify(mockBluetoothRouteManager).connectBluetoothAudio(
+                            params.expectedBluetoothDevice.getAddress());
+                }
                 verify(mockBluetoothRouteManager, never()).disconnectBluetoothAudio();
                 break;
             case OFF:
-                verify(mockBluetoothRouteManager, never()).connectBluetoothAudio(null);
+                verify(mockBluetoothRouteManager, never())
+                        .connectBluetoothAudio(nullable(String.class));
                 verify(mockBluetoothRouteManager).disconnectBluetoothAudio();
+                break;
+            case OPTIONAL:
+                // optional, don't test
+                break;
         }
 
         switch (params.speakerInteraction) {
@@ -865,6 +1053,10 @@ public class CallAudioRouteStateMachineTest
             case ON: // fall through
             case OFF:
                 verify(mockAudioManager).setSpeakerphoneOn(params.speakerInteraction == ON);
+                break;
+            case OPTIONAL:
+                // optional, don't test
+                break;
         }
 
         // Verify the end state
@@ -881,6 +1073,14 @@ public class CallAudioRouteStateMachineTest
         when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(
                 (params.availableRoutes & CallAudioState.ROUTE_BLUETOOTH) != 0
                         || (params.expectedAvailableRoutes & CallAudioState.ROUTE_BLUETOOTH) != 0);
+        when(mockBluetoothRouteManager.getConnectedDevices())
+                .thenReturn(params.availableBluetoothDevices);
+        if (params.initialBluetoothDevice != null) {
+            when(mockBluetoothRouteManager.getBluetoothAudioConnectedDevice())
+                    .thenReturn(params.initialBluetoothDevice);
+        }
+
+
         doAnswer(invocation -> {
             sm.sendMessageWithSessionInfo(CallAudioRouteStateMachine.BT_AUDIO_CONNECTED);
             return null;
@@ -893,7 +1093,7 @@ public class CallAudioRouteStateMachineTest
 
     private void runParametrizedTestCaseWithoutFocus(final RoutingTestParameters params)
             throws Throwable {
-        resetMocks(true);
+        resetMocks();
 
         // Construct a fresh state machine on every case
         final CallAudioRouteStateMachine stateMachine = new CallAudioRouteStateMachine(
@@ -903,7 +1103,7 @@ public class CallAudioRouteStateMachineTest
                 mockWiredHeadsetManager,
                 mockStatusBarNotifier,
                 mAudioServiceFactory,
-                params.doesDeviceSupportEarpiece);
+                params.earpieceControl);
 
         // Set up bluetooth and speakerphone state
         when(mockBluetoothRouteManager.isBluetoothAvailable()).thenReturn(
@@ -938,7 +1138,7 @@ public class CallAudioRouteStateMachineTest
 
     private void verifyNoSystemAudioChanges() {
         verify(mockBluetoothRouteManager, never()).disconnectBluetoothAudio();
-        verify(mockBluetoothRouteManager, never()).connectBluetoothAudio(null);
+        verify(mockBluetoothRouteManager, never()).connectBluetoothAudio(nullable(String.class));
         verify(mockAudioManager, never()).setSpeakerphoneOn(any(Boolean.class));
         verify(mockCallsManager, never()).onCallAudioStateChanged(any(CallAudioState.class),
                 any(CallAudioState.class));
@@ -959,14 +1159,21 @@ public class CallAudioRouteStateMachineTest
         verify(mockConnectionServiceWrapper, timeout(TEST_TIMEOUT).atLeastOnce())
                 .onCallAudioStateChanged(same(fakeCall), newStateCaptor2.capture());
 
-        assertTrue(oldStateCaptor.getValue().equals(expectedOldState));
+        assertTrue(oldStateCaptor.getAllValues().get(0).equals(expectedOldState));
         assertTrue(newStateCaptor1.getValue().equals(expectedNewState));
         assertTrue(newStateCaptor2.getValue().equals(expectedNewState));
     }
 
-    private void resetMocks(boolean resetNotificationFilter) {
+    private void setInBandRing(boolean enabled) {
+        mComponentContextFixture.putBooleanResource(
+                com.android.internal.R.bool.config_bluetooth_hfp_inband_ringing_support,
+                enabled);
+    }
+
+    private void resetMocks() {
         reset(mockAudioManager, mockBluetoothRouteManager, mockCallsManager,
-                mockConnectionServiceWrapper, fakeCall);
+                mockConnectionServiceWrapper);
+        fakeCall = mock(Call.class);
         when(mockCallsManager.getForegroundCall()).thenReturn(fakeCall);
         when(fakeCall.getConnectionService()).thenReturn(mockConnectionServiceWrapper);
         when(fakeCall.isAlive()).thenReturn(true);

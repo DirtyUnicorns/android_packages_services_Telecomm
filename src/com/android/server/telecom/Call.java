@@ -74,7 +74,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *  connected etc).
  */
 @VisibleForTesting
-public class Call implements CreateConnectionResponse, EventManager.Loggable {
+public class Call implements CreateConnectionResponse, EventManager.Loggable,
+        ConnectionServiceFocusManager.CallFocus {
     public final static String CALL_ID_UNKNOWN = "-1";
     public final static long DATA_USAGE_NOT_SET = -1;
 
@@ -92,6 +93,9 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
     private static final int RTT_PIPE_WRITE_SIDE_INDEX = 1;
 
     private static final int INVALID_RTT_REQUEST_ID = -1;
+
+    private static final char NO_DTMF_TONE = '\0';
+
     /**
      * Listener for events on the call.
      */
@@ -131,7 +135,8 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
         void onRttInitiationFailure(Call call, int reason);
         void onRemoteRttRequest(Call call, int requestId);
         void onHandoverRequested(Call call, PhoneAccountHandle handoverTo, int videoState,
-                                 Bundle extras);
+                                 Bundle extras, boolean isLegacy);
+        void onHandoverFailed(Call call, int error);
     }
 
     public abstract static class ListenerBase implements Listener {
@@ -205,7 +210,9 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
         public void onRemoteRttRequest(Call call, int requestId) {}
         @Override
         public void onHandoverRequested(Call call, PhoneAccountHandle handoverTo, int videoState,
-                                        Bundle extras) {}
+                                        Bundle extras, boolean isLegacy) {}
+        @Override
+        public void onHandoverFailed(Call call, int error) {}
     }
 
     private final CallerInfoLookupHelper.OnQueryCompleteListener mCallerInfoQueryListener =
@@ -403,6 +410,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
     private final String mId;
     private String mConnectionId;
     private Analytics.CallInfo mAnalytics;
+    private char mPlayingDtmfTone;
 
     private boolean mWasConferencePreviouslyMerged = false;
     private boolean mWasHighDefAudio = false;
@@ -470,6 +478,10 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
      * Integer constant from {@link android.telecom.Call.RttCall}. Describes the current RTT mode.
      */
     private int mRttMode;
+    /**
+     * True if the call was ever an RTT call.
+     */
+    private boolean mWasEverRtt = false;
 
     /**
      * Integer indicating the remote RTT request ID that is pending a response from the user.
@@ -478,13 +490,13 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
 
     /**
      * When a call handover has been initiated via {@link #requestHandover(PhoneAccountHandle,
-     * int, Bundle)}, contains the call which this call is being handed over to.
+     * int, Bundle, boolean)}, contains the call which this call is being handed over to.
      */
     private Call mHandoverDestinationCall = null;
 
     /**
      * When a call handover has been initiated via {@link #requestHandover(PhoneAccountHandle,
-     * int, Bundle)}, contains the call which this call is being handed over from.
+     * int, Bundle, boolean)}, contains the call which this call is being handed over from.
      */
     private Call mHandoverSourceCall = null;
 
@@ -735,6 +747,11 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
         }
 
         return sb.toString();
+    }
+
+    @Override
+    public ConnectionServiceFocusManager.ConnectionServiceFocus getConnectionServiceWrapper() {
+        return mConnectionService;
     }
 
     @VisibleForTesting
@@ -1571,7 +1588,8 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
     /**
      * Plays the specified DTMF tone.
      */
-    void playDtmfTone(char digit) {
+    @VisibleForTesting
+    public void playDtmfTone(char digit) {
         if (mConnectionService == null) {
             Log.w(this, "playDtmfTone() request on a call without a connection service.");
         } else {
@@ -1579,12 +1597,14 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
             mConnectionService.playDtmfTone(this, digit);
             Log.addEvent(this, LogUtils.Events.START_DTMF, Log.pii(digit));
         }
+        mPlayingDtmfTone = digit;
     }
 
     /**
      * Stops playing any currently playing DTMF tone.
      */
-    void stopDtmfTone() {
+    @VisibleForTesting
+    public void stopDtmfTone() {
         if (mConnectionService == null) {
             Log.w(this, "stopDtmfTone() request on a call without a connection service.");
         } else {
@@ -1592,6 +1612,15 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
             Log.addEvent(this, LogUtils.Events.STOP_DTMF);
             mConnectionService.stopDtmfTone(this);
         }
+        mPlayingDtmfTone = NO_DTMF_TONE;
+    }
+
+    /**
+     * @return {@code true} if a DTMF tone has been started via {@link #playDtmfTone(char)} but has
+     * not been stopped via {@link #stopDtmfTone()}, {@code false} otherwise.
+     */
+    boolean isDtmfTonePlaying() {
+        return mPlayingDtmfTone != NO_DTMF_TONE;
     }
 
     /**
@@ -2032,7 +2061,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
                 if (handoverExtras instanceof Bundle) {
                     handoverExtrasBundle = (Bundle) handoverExtras;
                 }
-                requestHandover(phoneAccountHandle, videoState, handoverExtrasBundle);
+                requestHandover(phoneAccountHandle, videoState, handoverExtrasBundle, true);
             } else {
                 Log.addEvent(this, LogUtils.Events.CALL_EVENT, event);
                 mConnectionService.sendCallEvent(this, event, extras);
@@ -2041,6 +2070,17 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
             Log.e(this, new NullPointerException(),
                     "sendCallEvent failed due to null CS callId=%s", getId());
         }
+    }
+
+    /**
+     * Initiates a handover of this Call to the {@link ConnectionService} identified
+     * by destAcct.
+     * @param destAcct ConnectionService to which the call should be handed over.
+     * @param videoState The video state desired after the handover.
+     * @param extras Extra information to be passed to ConnectionService
+     */
+    public void handoverTo(PhoneAccountHandle destAcct, int videoState, Bundle extras) {
+        requestHandover(destAcct, videoState, extras, false);
     }
 
     /**
@@ -2353,6 +2393,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
                 && mConnectionServiceToInCallStreams != null;
         if (shouldBeRtt && !areStreamsInitialized) {
             try {
+                mWasEverRtt = true;
                 mInCallToConnectionServiceStreams = ParcelFileDescriptor.createReliablePipe();
                 mConnectionServiceToInCallStreams = ParcelFileDescriptor.createReliablePipe();
             } catch (IOException e) {
@@ -2410,6 +2451,10 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
 
     public boolean isRttCall() {
         return (mConnectionProperties & Connection.PROPERTY_IS_RTT) == Connection.PROPERTY_IS_RTT;
+    }
+
+    public boolean wasEverRttCall() {
+        return mWasEverRtt;
     }
 
     public ParcelFileDescriptor getCsToInCallRttPipeForCs() {
@@ -2712,6 +2757,12 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
         }
     }
 
+    public void onHandoverFailed(int handoverError) {
+        for (Listener l : mListeners) {
+            l.onHandoverFailed(this, handoverError);
+        }
+    }
+
     public void setOriginalConnectionId(String originalConnectionId) {
         mOriginalConnectionId = originalConnectionId;
     }
@@ -2761,9 +2812,9 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable {
      *      {@link android.telecom.InCallService}.
      */
     private void requestHandover(PhoneAccountHandle handoverToHandle, int videoState,
-                                 Bundle extras) {
+                                 Bundle extras, boolean isLegacy) {
         for (Listener l : mListeners) {
-            l.onHandoverRequested(this, handoverToHandle, videoState, extras);
+            l.onHandoverRequested(this, handoverToHandle, videoState, extras, isLegacy);
         }
     }
 

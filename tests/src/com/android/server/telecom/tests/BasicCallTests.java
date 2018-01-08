@@ -555,10 +555,10 @@ public class BasicCallTests extends TelecomSystemTest {
         verify(mAudioService, timeout(TEST_TIMEOUT))
                 .setMicrophoneMute(eq(false), any(String.class), any(Integer.class));
 
-        mInCallServiceFixtureX.mInCallAdapter.setAudioRoute(CallAudioState.ROUTE_SPEAKER);
+        mInCallServiceFixtureX.mInCallAdapter.setAudioRoute(CallAudioState.ROUTE_SPEAKER, null);
         verify(audioManager, timeout(TEST_TIMEOUT))
                 .setSpeakerphoneOn(true);
-        mInCallServiceFixtureX.mInCallAdapter.setAudioRoute(CallAudioState.ROUTE_EARPIECE);
+        mInCallServiceFixtureX.mInCallAdapter.setAudioRoute(CallAudioState.ROUTE_EARPIECE, null);
         verify(audioManager, timeout(TEST_TIMEOUT))
                 .setSpeakerphoneOn(false);
 
@@ -858,26 +858,6 @@ public class BasicCallTests extends TelecomSystemTest {
                 .pullExternalCall(eq(ids.mConnectionId), any());
     }
 
-    @LargeTest
-    public void testEmergencyCallFailMoveToSecondSim() throws Exception {
-        IdPair ids = startAndMakeDialingEmergencyCall("650-555-1212",
-                mPhoneAccountE0.getAccountHandle(), mConnectionServiceFixtureA);
-        assertEquals(Call.STATE_DIALING, mInCallServiceFixtureX.getCall(ids.mCallId).getState());
-        assertEquals(Call.STATE_DIALING, mInCallServiceFixtureY.getCall(ids.mCallId).getState());
-
-        // The Emergency Call has failed on the default SIM with an ERROR Disconnect Cause. Retry
-        // with the other SIM PhoneAccount
-        IdPair newIds = triggerEmergencyRedial(mPhoneAccountE1.getAccountHandle(),
-                mConnectionServiceFixtureA, ids);
-
-        // Call should be active on the E1 PhoneAccount
-        mConnectionServiceFixtureA.sendSetActive(newIds.mConnectionId);
-        assertEquals(Call.STATE_ACTIVE, mInCallServiceFixtureX.getCall(newIds.mCallId).getState());
-        assertEquals(Call.STATE_ACTIVE, mInCallServiceFixtureY.getCall(newIds.mCallId).getState());
-        assertEquals(mInCallServiceFixtureX.getCall(ids.mCallId).getAccountHandle(),
-                mPhoneAccountE1.getAccountHandle());
-    }
-
     /**
      * Test scenario where the user starts an outgoing video call with no selected PhoneAccount, and
      * then subsequently selects a PhoneAccount which supports video calling.
@@ -974,5 +954,31 @@ public class BasicCallTests extends TelecomSystemTest {
 
         assertFalse(mTelecomSystem.getTelecomServiceImpl().getBinder()
                 .isOutgoingCallPermitted(mPhoneAccountSelfManaged.getAccountHandle()));
+    }
+
+    /**
+     * Basic to verify audio route gets reset to baseline when emergency call placed while a
+     * self-managed call is underway.
+     * @throws Exception
+     */
+    @LargeTest
+    public void testDisconnectSelfManaged() throws Exception {
+        // Add a self-managed call.
+        PhoneAccountHandle phoneAccountHandle = mPhoneAccountSelfManaged.getAccountHandle();
+        startAndMakeActiveIncomingCall("650-555-1212", phoneAccountHandle,
+                mConnectionServiceFixtureA);
+        Connection connection = mConnectionServiceFixtureA.mLatestConnection;
+
+        // Route self-managed call to speaker.
+        connection.setAudioRoute(CallAudioState.ROUTE_SPEAKER);
+        waitForHandlerAction(new Handler(Looper.getMainLooper()), TEST_TIMEOUT);
+
+        // Place an emergency call.
+        startAndMakeDialingEmergencyCall("650-555-1212", mPhoneAccountE0.getAccountHandle(),
+                mConnectionServiceFixtureA);
+
+        // Should have reverted back to earpiece.
+        assertEquals(CallAudioState.ROUTE_EARPIECE,
+                mInCallServiceFixtureX.mCallAudioState.getRoute());
     }
 }

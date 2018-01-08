@@ -386,13 +386,15 @@ public class CallAudioManager extends CallsManagerListenerBase {
      * Changed the audio route, for example from earpiece to speaker phone.
      *
      * @param route The new audio route to use. See {@link CallAudioState}.
+     * @param bluetoothAddress the address of the desired bluetooth device, if route is
+     * {@link CallAudioState#ROUTE_BLUETOOTH}.
      */
-    void setAudioRoute(int route) {
+    void setAudioRoute(int route, String bluetoothAddress) {
         Log.v(this, "setAudioRoute, route: %s", CallAudioState.audioRouteToString(route));
         switch (route) {
             case CallAudioState.ROUTE_BLUETOOTH:
                 mCallAudioRouteStateMachine.sendMessageWithSessionInfo(
-                        CallAudioRouteStateMachine.USER_SWITCH_BLUETOOTH);
+                        CallAudioRouteStateMachine.USER_SWITCH_BLUETOOTH, 0, bluetoothAddress);
                 return;
             case CallAudioState.ROUTE_SPEAKER:
                 mCallAudioRouteStateMachine.sendMessageWithSessionInfo(
@@ -414,6 +416,17 @@ public class CallAudioManager extends CallsManagerListenerBase {
             default:
                 Log.wtf(this, "Invalid route specified: %d", route);
         }
+    }
+
+    /**
+     * Switch call audio routing to the baseline route, including bluetooth headsets if there are
+     * any connected.
+     */
+    void switchBaseline() {
+        Log.i(this, "switchBaseline");
+        mCallAudioRouteStateMachine.sendMessageWithSessionInfo(
+                CallAudioRouteStateMachine.USER_SWITCH_BASELINE_ROUTE,
+                CallAudioRouteStateMachine.INCLUDE_BLUETOOTH_IN_BASELINE);
     }
 
     void silenceRingers() {
