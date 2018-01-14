@@ -3270,4 +3270,13 @@ public class CallsManager extends Call.ListenerBase
         }
         return ;
     }
+
+    void resetCdmaConnectionTime(Call call) {
+        call.setConnectTimeMillis(System.currentTimeMillis());
+        if (mCalls.contains(call)) {
+            for (CallsManagerListener listener : mListeners) {
+                listener.onCallStateChanged(call, CallState.ACTIVE, CallState.ACTIVE);
+            }
+        }
+    }
 }
