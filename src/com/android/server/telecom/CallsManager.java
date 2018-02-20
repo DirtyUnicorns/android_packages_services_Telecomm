@@ -915,12 +915,12 @@ public class CallsManager extends Call.ListenerBase
                 call.setIsVoipAudioMode(true);
             }
         }
-        if (isRttSettingOn() ||
+        if (isRttSettingOn() &&
                 extras.getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
             Log.d(this, "Incoming call requesting RTT, rtt setting is %b", isRttSettingOn());
             if (phoneAccount != null &&
                     phoneAccount.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
-                call.setRttStreams(true);
+                call.createRttStreams();
             }
             // Even if the phone account doesn't support RTT yet, the connection manager might
             // change that. Set this to check it later.
@@ -1211,7 +1211,7 @@ public class CallsManager extends Call.ListenerBase
                 Log.d(this, "Outgoing call requesting RTT, rtt setting is %b", isRttSettingOn());
                 if (accountToUse != null
                         && accountToUse.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
-                    call.setRttStreams(true);
+                    call.createRttStreams();
                 }
                 // Even if the phone account doesn't support RTT yet, the connection manager might
                 // change that. Set this to check it later.
@@ -1445,6 +1445,20 @@ public class CallsManager extends Call.ListenerBase
             mConnectionSvrFocusMgr.requestFocus(
                     call,
                     new RequestCallback(new ActionAnswerCall(call, videoState)));
+        }
+    }
+
+    /**
+     * Instructs Telecom to deflect the specified call. Intended to be invoked by the in-call
+     * app through {@link InCallAdapter} after Telecom notifies it of an incoming call followed by
+     * the user opting to deflect said call.
+     */
+    @VisibleForTesting
+    public void deflectCall(Call call, Uri address) {
+        if (!mCalls.contains(call)) {
+            Log.i(this, "Request to deflect a non-existent call %s", call);
+        } else {
+            call.deflect(address);
         }
     }
 
@@ -1764,8 +1778,7 @@ public class CallsManager extends Call.ListenerBase
 
     private boolean isRttSettingOn() {
         return Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.RTT_CALLING_MODE, TelecomManager.TTY_MODE_OFF)
-                != TelecomManager.TTY_MODE_OFF;
+                Settings.System.RTT_CALLING_MODE, 0) != 0;
     }
 
     void phoneAccountSelected(Call call, PhoneAccountHandle account, boolean setDefault) {
@@ -1787,7 +1800,7 @@ public class CallsManager extends Call.ListenerBase
                         " rtt setting is %b", isRttSettingOn());
                 if (realPhoneAccount != null
                         && realPhoneAccount.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
-                    call.setRttStreams(true);
+                    call.createRttStreams();
                 }
                 // Even if the phone account doesn't support RTT yet, the connection manager might
                 // change that. Set this to check it later.
