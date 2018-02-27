@@ -889,22 +889,22 @@ public class CallsManager extends Call.ListenerBase
             if (call.isSelfManaged()) {
                 // Self managed calls will always be voip audio mode.
                 call.setIsVoipAudioMode(true);
-            }
+            } else {
+                // Incoming call is managed, the active call is self-managed and can't be held.
+                // We need to set extras on it to indicate whether answering will cause a 
+                // active self-managed call to drop.
+                Call activeCall = (Call) mConnectionSvrFocusMgr.getCurrentFocusCall();
+                if (activeCall != null && !canHold(activeCall) && activeCall.isSelfManaged()) {
+                    Bundle dropCallExtras = new Bundle();
+                    dropCallExtras.putBoolean(Connection.EXTRA_ANSWERING_DROPS_FG_CALL, true);
 
-            Call activeCall = (Call) mConnectionSvrFocusMgr.getCurrentFocusCall();
-
-            if (activeCall != null && !canHold(activeCall)) {
-                Bundle dropCallExtras = new Bundle();
-                dropCallExtras.putBoolean(Connection.EXTRA_ANSWERING_DROPS_FG_CALL, true);
-
-                // Include the name of the app which will drop the call.
-                if (activeCall != null) {
+                    // Include the name of the app which will drop the call.
                     CharSequence droppedApp = activeCall.getTargetPhoneAccountLabel();
                     dropCallExtras.putCharSequence(
                             Connection.EXTRA_ANSWERING_DROPS_FG_CALL_APP_NAME, droppedApp);
                     Log.i(this, "Incoming managed call will drop %s call.", droppedApp);
+                    call.putExtras(Call.SOURCE_CONNECTION_SERVICE, dropCallExtras);
                 }
-                call.putExtras(Call.SOURCE_CONNECTION_SERVICE, dropCallExtras);
             }
 
             if (extras.getBoolean(PhoneAccount.EXTRA_ALWAYS_USE_VOIP_AUDIO_MODE)) {
@@ -1410,13 +1410,18 @@ public class CallsManager extends Call.ListenerBase
             // Hold or disconnect the active call and request call focus for the incoming call.
             Call activeCall = (Call) mConnectionSvrFocusMgr.getCurrentFocusCall();
             Log.d(this, "Incoming call = %s Ongoing call %s", call, activeCall);
-            if (activeCall != null) {
+            if (activeCall != null && activeCall != call) {
+                // Hold the telephony call even if it doesn't have the hold capability.
                 if (canHold(activeCall)) {
-                    Log.d(this, "answerCall hold active call");
+                    Log.d(this, "Answer %s, hold %s", call, activeCall);
                     activeCall.hold();
                 } else {
-                    Log.d(this, "answerCall disconnect active call");
-                    activeCall.disconnect();
+                    // This call does not support hold. If it is from a different connection
+                    // service, then disconnect it, otherwise allow the connection service to
+                    // figure out the right states.
+                    if (activeCall.getConnectionService() != call.getConnectionService()) {
+                        activeCall.disconnect();
+                    }
                 }
             }
 
@@ -1592,14 +1597,21 @@ public class CallsManager extends Call.ListenerBase
         if (!mCalls.contains(call)) {
             Log.w(this, "Unknown call (%s) asked to be removed from hold", call);
         } else {
-           Call activeCall = (Call) mConnectionSvrFocusMgr.getCurrentFocusCall();
+            Call activeCall = (Call) mConnectionSvrFocusMgr.getCurrentFocusCall();
             if (activeCall != null) {
                 if (canHold(activeCall)) {
                     activeCall.hold();
                     Log.addEvent(activeCall, LogUtils.Events.SWAP);
                     Log.addEvent(call, LogUtils.Events.SWAP);
                 } else {
-                    activeCall.disconnect();
+                    // This call does not support hold. If it is from a different connection
+                    // service, then disconnect it, otherwise invoke call.hold() and allow the
+                    // connection service to handle the situation.
+                    if (activeCall.getConnectionService() != call.getConnectionService()) {
+                        activeCall.disconnect();
+                    } else {
+                        activeCall.hold();
+                    }
                 }
             }
             mConnectionSvrFocusMgr.requestFocus(
@@ -1790,7 +1802,8 @@ public class CallsManager extends Call.ListenerBase
      * @param isTonePlaying true if the disconnected tone is started, otherwise the disconnected
      * tone is stopped.
      */
-    void onDisconnectedTonePlaying(boolean isTonePlaying) {
+    @VisibleForTesting
+    public void onDisconnectedTonePlaying(boolean isTonePlaying) {
         Log.v(this, "onDisconnectedTonePlaying, %s", isTonePlaying ? "started" : "stopped");
         for (CallsManagerListener listener : mListeners) {
             listener.onDisconnectedTonePlaying(isTonePlaying);
@@ -2396,8 +2409,11 @@ public class CallsManager extends Call.ListenerBase
         // completed; this allows the InCallService to be notified that a handover it
         // initiated completed.
         call.onConnectionEvent(Connection.EVENT_HANDOVER_COMPLETE, null);
+        call.onHandoverComplete();
+
         // Inform the "to" ConnectionService that handover to it has completed.
         handoverTo.sendCallEvent(android.telecom.Call.EVENT_HANDOVER_COMPLETE, null);
+        handoverTo.onHandoverComplete();
         answerCall(handoverTo, handoverTo.getVideoState());
         call.markFinishedHandoverStateAndCleanup(HandoverState.HANDOVER_COMPLETE);
 
@@ -2995,10 +3011,15 @@ public class CallsManager extends Call.ListenerBase
                     !hasMaximumManagedLiveCalls(excludeCall) &&
                     !hasMaximumManagedHoldingCalls(excludeCall);
         } else {
-            // Only permit self-managed outgoing calls if there is no ongoing emergency calls and
-            // the ongoing call can be held.
-            Call foregroundCall = getForegroundCall();
-            return !hasEmergencyCall() && (foregroundCall == null || canHold(foregroundCall));
+            // Only permit self-managed outgoing calls if
+            // 1. there is no emergency ongoing call
+            // 2. The outgoing call is an handover call or it not hit the self-managed call limit
+            // and the current active call can be held.
+            Call activeCall = (Call) mConnectionSvrFocusMgr.getCurrentFocusCall();
+            return !hasEmergencyCall() &&
+                    ((excludeCall != null && excludeCall.getHandoverSourceCall() != null) ||
+                            (!hasMaximumSelfManagedCalls(excludeCall, phoneAccountHandle) &&
+                                    (activeCall == null || canHold(activeCall))));
         }
     }
 
@@ -3203,15 +3224,19 @@ public class CallsManager extends Call.ListenerBase
     }
 
     private void setIntentExtrasAndStartTime(Call call, Bundle extras) {
-      // Create our own instance to modify (since extras may be Bundle.EMPTY)
-      extras = new Bundle(extras);
+        if (extras != null) {
+            // Create our own instance to modify (since extras may be Bundle.EMPTY)
+            extras = new Bundle(extras);
+        } else {
+            extras = new Bundle();
+        }
 
-      // Specifies the time telecom began routing the call. This is used by the dialer for
-      // analytics.
-      extras.putLong(TelecomManager.EXTRA_CALL_TELECOM_ROUTING_START_TIME_MILLIS,
+        // Specifies the time telecom began routing the call. This is used by the dialer for
+        // analytics.
+        extras.putLong(TelecomManager.EXTRA_CALL_TELECOM_ROUTING_START_TIME_MILLIS,
               SystemClock.elapsedRealtime());
 
-      call.setIntentExtras(extras);
+        call.setIntentExtras(extras);
     }
 
     /**
@@ -3248,7 +3273,6 @@ public class CallsManager extends Call.ListenerBase
         service.handoverFailed(call, reason);
         call.setDisconnectCause(new DisconnectCause(DisconnectCause.CANCELED));
         call.disconnect();
-
     }
 
     /**
@@ -3314,7 +3338,7 @@ public class CallsManager extends Call.ListenerBase
      * @param handoverFromCall The {@link Call} to be handed over.
      * @param handoverToHandle The {@link PhoneAccountHandle} to hand over the call to.
      * @param videoState The desired video state of {@link Call} after handover.
-     * @param initiatingExtras Extras associated with the handover, to be passed to the handover
+     * @param extras Extras associated with the handover, to be passed to the handover
      *               {@link android.telecom.ConnectionService}.
      */
     private void requestHandover(Call handoverFromCall, PhoneAccountHandle handoverToHandle,
@@ -3360,8 +3384,6 @@ public class CallsManager extends Call.ListenerBase
         }
         call.setInitiatingUser(getCurrentUserHandle());
 
-
-
         // Ensure we don't try to place an outgoing call with video if video is not
         // supported.
         if (VideoProfile.isVideo(videoState) && account != null &&
@@ -3385,6 +3407,14 @@ public class CallsManager extends Call.ListenerBase
         call.setState(
                 CallState.CONNECTING,
                 handoverToHandle == null ? "no-handle" : handoverToHandle.toString());
+
+        // Mark as handover so that the ConnectionService knows this is a handover request.
+        if (extras == null) {
+            extras = new Bundle();
+        }
+        extras.putBoolean(TelecomManager.EXTRA_IS_HANDOVER_CONNECTION, true);
+        extras.putParcelable(TelecomManager.EXTRA_HANDOVER_FROM_PHONE_ACCOUNT,
+                handoverFromCall.getTargetPhoneAccount());
         setIntentExtrasAndStartTime(call, extras);
 
         // Add call to call tracker
@@ -3594,6 +3624,14 @@ public class CallsManager extends Call.ListenerBase
             // handover to call is a video call.
             call.setStartWithSpeakerphoneOn(true);
         }
+
+        Bundle extras = call.getIntentExtras();
+        if (extras == null) {
+            extras = new Bundle();
+        }
+        extras.putBoolean(TelecomManager.EXTRA_IS_HANDOVER_CONNECTION, true);
+        extras.putParcelable(TelecomManager.EXTRA_HANDOVER_FROM_PHONE_ACCOUNT,
+                fromCall.getTargetPhoneAccount());
 
         call.startCreateConnection(mPhoneAccountRegistrar);
     }
