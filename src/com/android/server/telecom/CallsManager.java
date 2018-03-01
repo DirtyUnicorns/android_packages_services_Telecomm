@@ -238,6 +238,7 @@ public class CallsManager extends Call.ListenerBase
     private final DtmfLocalTonePlayer mDtmfLocalTonePlayer;
     private final InCallController mInCallController;
     private final CallAudioManager mCallAudioManager;
+    private final CallRecordingTonePlayer mCallRecordingTonePlayer;
     private RespondViaSmsManager mRespondViaSmsManager;
     private final Ringer mRinger;
     private final InCallWakeLockController mInCallWakeLockController;
@@ -386,7 +387,8 @@ public class CallsManager extends Call.ListenerBase
                 emergencyCallHelper);
         mRinger = new Ringer(playerFactory, context, systemSettingsUtil, asyncRingtonePlayer,
                 ringtoneFactory, systemVibrator, mInCallController);
-
+        mCallRecordingTonePlayer = new CallRecordingTonePlayer(mContext,
+                (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE), mLock);
         mCallAudioManager = new CallAudioManager(callAudioRouteStateMachine,
                 this,new CallAudioModeStateMachine((AudioManager)
                         mContext.getSystemService(Context.AUDIO_SERVICE)),
@@ -394,7 +396,6 @@ public class CallsManager extends Call.ListenerBase
 
         mConnectionSvrFocusMgr = connectionServiceFocusManagerFactory.create(
                 mRequester, Looper.getMainLooper());
-
         mHeadsetMediaButton = headsetMediaButtonFactory.create(context, this, mLock);
         mTtyManager = new TtyManager(context, mWiredHeadsetManager);
         mProximitySensorManager = proximitySensorManagerFactory.create(context, this);
@@ -411,6 +412,7 @@ public class CallsManager extends Call.ListenerBase
         mListeners.add(mPhoneStateBroadcaster);
         mListeners.add(mInCallController);
         mListeners.add(mCallAudioManager);
+        mListeners.add(mCallRecordingTonePlayer);
         mListeners.add(missedCallNotifier);
         mListeners.add(mHeadsetMediaButton);
         mListeners.add(mProximitySensorManager);
@@ -913,11 +915,16 @@ public class CallsManager extends Call.ListenerBase
                 call.setIsVoipAudioMode(true);
             }
         }
-        if (extras.getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
+        if (isRttSettingOn() ||
+                extras.getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
+            Log.d(this, "Incoming call requesting RTT, rtt setting is %b", isRttSettingOn());
             if (phoneAccount != null &&
                     phoneAccount.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
                 call.setRttStreams(true);
             }
+            // Even if the phone account doesn't support RTT yet, the connection manager might
+            // change that. Set this to check it later.
+            call.setRequestedToStartWithRtt();
         }
         // If the extras specifies a video state, set it on the call if the PhoneAccount supports
         // video.
@@ -1199,12 +1206,16 @@ public class CallsManager extends Call.ListenerBase
                     CallState.CONNECTING,
                     phoneAccountHandle == null ? "no-handle" : phoneAccountHandle.toString());
 
-            if (extras != null
-                    && extras.getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
+            if (isRttSettingOn() || (extras != null
+                    && extras.getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false))) {
+                Log.d(this, "Outgoing call requesting RTT, rtt setting is %b", isRttSettingOn());
                 if (accountToUse != null
                         && accountToUse.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
                     call.setRttStreams(true);
                 }
+                // Even if the phone account doesn't support RTT yet, the connection manager might
+                // change that. Set this to check it later.
+                call.setRequestedToStartWithRtt();
             }
         }
         setIntentExtrasAndStartTime(call, extras);
@@ -1293,7 +1304,13 @@ public class CallsManager extends Call.ListenerBase
         return accounts;
     }
 
-    private boolean isSelfManaged(PhoneAccountHandle targetPhoneAccountHandle,
+    /**
+     * Determines if a {@link PhoneAccountHandle} is for a self-managed ConnectionService.
+     * @param targetPhoneAccountHandle The phone account to check.
+     * @param initiatingUser The user associated with the account.
+     * @return {@code true} if the phone account is self-managed, {@code false} otherwise.
+     */
+    public boolean isSelfManaged(PhoneAccountHandle targetPhoneAccountHandle,
             UserHandle initiatingUser) {
         PhoneAccount targetPhoneAccount = mPhoneAccountRegistrar.getPhoneAccount(
                 targetPhoneAccountHandle, initiatingUser);
@@ -1745,6 +1762,12 @@ public class CallsManager extends Call.ListenerBase
         mProximitySensorManager.turnOff(screenOnImmediately);
     }
 
+    private boolean isRttSettingOn() {
+        return Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.RTT_CALLING_MODE, TelecomManager.TTY_MODE_OFF)
+                != TelecomManager.TTY_MODE_OFF;
+    }
+
     void phoneAccountSelected(Call call, PhoneAccountHandle account, boolean setDefault) {
         if (!mCalls.contains(call)) {
             Log.i(this, "Attempted to add account to unknown call %s", call);
@@ -1758,12 +1781,17 @@ public class CallsManager extends Call.ListenerBase
                 Log.d("phoneAccountSelected: default to voip mode for call %s", call.getId());
                 call.setIsVoipAudioMode(true);
             }
-            if (call.getIntentExtras()
+            if (isRttSettingOn() || call.getIntentExtras()
                     .getBoolean(TelecomManager.EXTRA_START_CALL_WITH_RTT, false)) {
+                Log.d(this, "Outgoing call after account selection requesting RTT," +
+                        " rtt setting is %b", isRttSettingOn());
                 if (realPhoneAccount != null
                         && realPhoneAccount.hasCapabilities(PhoneAccount.CAPABILITY_RTT)) {
                     call.setRttStreams(true);
                 }
+                // Even if the phone account doesn't support RTT yet, the connection manager might
+                // change that. Set this to check it later.
+                call.setRequestedToStartWithRtt();
             }
 
             if (!call.isNewOutgoingCallIntentBroadcastDone()) {
