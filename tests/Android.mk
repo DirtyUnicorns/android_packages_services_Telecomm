@@ -37,7 +37,6 @@ LOCAL_PROTO_JAVA_OUTPUT_PARAMS := optional_field_style=accessors
 LOCAL_RESOURCE_DIR := \
     $(LOCAL_PATH)/res \
     $(LOCAL_PATH)/../res \
-    $(SUPPORT_LIBRARY_ROOT)/compat/res
 
 LOCAL_JAVA_LIBRARIES := \
         android.test.mock \
@@ -56,6 +55,7 @@ LOCAL_JACK_FLAGS := --multi-dex native
 LOCAL_PROGUARD_ENABLED := disabled
 
 LOCAL_PACKAGE_NAME := TelecomUnitTests
+LOCAL_PRIVATE_PLATFORM_APIS := true
 LOCAL_CERTIFICATE := platform
 
 LOCAL_MODULE_TAGS := tests
