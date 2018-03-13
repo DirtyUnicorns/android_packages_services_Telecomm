@@ -27,6 +27,7 @@ import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
@@ -68,6 +69,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import java.util.List;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
@@ -1025,5 +1027,91 @@ public class BasicCallTests extends TelecomSystemTest {
         // Should have reverted back to earpiece.
         assertEquals(CallAudioState.ROUTE_EARPIECE,
                 mInCallServiceFixtureX.mCallAudioState.getRoute());
+    }
+
+    /**
+     * Tests the {@link Call#deflect} API.  Verifies that if a call is incoming,
+     * and deflect API is called, then request is made to the connection service.
+     *
+     * @throws Exception
+     */
+    @LargeTest
+    @Test
+    public void testDeflectCallWhenIncoming() throws Exception {
+        Uri deflectAddress = Uri.parse("tel:650-555-1214");
+        IdPair ids = startIncomingPhoneCall("650-555-1212", mPhoneAccountA0.getAccountHandle(),
+                mConnectionServiceFixtureA);
+
+        assertEquals(Call.STATE_RINGING, mInCallServiceFixtureX.getCall(ids.mCallId).getState());
+        assertEquals(Call.STATE_RINGING, mInCallServiceFixtureY.getCall(ids.mCallId).getState());
+        // Attempt to deflect the call and verify the API call makes it through
+        mInCallServiceFixtureX.mInCallAdapter.deflectCall(ids.mCallId, deflectAddress);
+        verify(mConnectionServiceFixtureA.getTestDouble(), timeout(TEST_TIMEOUT))
+                .deflect(eq(ids.mConnectionId), eq(deflectAddress), any());
+        mInCallServiceFixtureX.mInCallAdapter.disconnectCall(ids.mCallId);
+    }
+
+    /**
+     * Tests the {@link Call#deflect} API.  Verifies that if a call is outgoing,
+     * and deflect API is called, then request is not made to the connection service.
+     * Ideally, deflect option should be displayed only if call is incoming/waiting.
+     *
+     * @throws Exception
+     */
+    @LargeTest
+    @Test
+    public void testDeflectCallWhenOutgoing() throws Exception {
+        Uri deflectAddress = Uri.parse("tel:650-555-1214");
+        IdPair ids = startOutgoingPhoneCall("650-555-1212", mPhoneAccountA0.getAccountHandle(),
+                mConnectionServiceFixtureA, Process.myUserHandle());
+        // Attempt to deflect the call and verify the API call does not make it through
+        mInCallServiceFixtureX.mInCallAdapter.deflectCall(ids.mCallId, deflectAddress);
+        verify(mConnectionServiceFixtureA.getTestDouble(), never())
+                .deflect(eq(ids.mConnectionId), eq(deflectAddress), any());
+        mInCallServiceFixtureX.mInCallAdapter.disconnectCall(ids.mCallId);
+    }
+
+    /**
+     * Test to make sure to unmute automatically when making an emergency call and keep unmute
+     * during the emergency call.
+     * @throws Exception
+     */
+    @LargeTest
+    @Test
+    public void testUnmuteDuringEmergencyCall() throws Exception {
+        // Make an outgoing call and turn ON mute.
+        IdPair outgoingCall = startAndMakeActiveOutgoingCall("650-555-1212",
+                mPhoneAccountA0.getAccountHandle(), mConnectionServiceFixtureA);
+        assertEquals(Call.STATE_ACTIVE, mInCallServiceFixtureX.getCall(outgoingCall.mCallId)
+                .getState());
+        mInCallServiceFixtureX.mInCallAdapter.mute(true);
+        waitForHandlerAction(mTelecomSystem.getCallsManager().getCallAudioManager()
+                .getCallAudioRouteStateMachine().getHandler(), TEST_TIMEOUT);
+        assertTrue(mTelecomSystem.getCallsManager().getAudioState().isMuted());
+
+        // Make an emergency call.
+        IdPair emergencyCall = startAndMakeDialingEmergencyCall("650-555-1213",
+                mPhoneAccountE0.getAccountHandle(), mConnectionServiceFixtureA);
+        assertEquals(Call.STATE_DIALING, mInCallServiceFixtureX.getCall(emergencyCall.mCallId)
+                .getState());
+        waitForHandlerAction(mTelecomSystem.getCallsManager().getCallAudioManager()
+                .getCallAudioRouteStateMachine().getHandler(), TEST_TIMEOUT);
+        // Should be unmute automatically.
+        assertFalse(mTelecomSystem.getCallsManager().getAudioState().isMuted());
+
+        // Toggle mute during an emergency call.
+        mTelecomSystem.getCallsManager().getCallAudioManager().toggleMute();
+        waitForHandlerAction(mTelecomSystem.getCallsManager().getCallAudioManager()
+                .getCallAudioRouteStateMachine().getHandler(), TEST_TIMEOUT);
+        // Should keep unmute.
+        assertFalse(mTelecomSystem.getCallsManager().getAudioState().isMuted());
+
+        ArgumentCaptor<Boolean> muteValueCaptor = ArgumentCaptor.forClass(Boolean.class);
+        verify(mAudioService, times(2)).setMicrophoneMute(muteValueCaptor.capture(),
+                any(String.class), any(Integer.class));
+        List<Boolean> muteValues = muteValueCaptor.getAllValues();
+        // Check mute status was changed twice with true and false.
+        assertTrue(muteValues.get(0));
+        assertFalse(muteValues.get(1));
     }
 }

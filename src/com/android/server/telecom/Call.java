@@ -48,6 +48,7 @@ import android.telecom.TelecomManager;
 import android.telecom.VideoProfile;
 import android.telephony.PhoneNumberUtils;
 import android.text.TextUtils;
+import android.util.StatsLog;
 import android.os.UserHandle;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -60,7 +61,6 @@ import java.io.IOException;
 import java.lang.String;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedList;
@@ -487,11 +487,6 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
     private ParcelFileDescriptor[] mConnectionServiceToInCallStreams;
 
     /**
-     * Abandoned RTT pipes, to be cleaned up when the call is removed
-     */
-    private Collection<ParcelFileDescriptor> mDiscardedRttFds = new LinkedList<>();
-
-    /**
      * True if we're supposed to start this call with RTT, either due to the master switch or due
      * to an extra.
      */
@@ -671,16 +666,33 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
             mCallerInfo.cachedPhotoIcon = null;
             mCallerInfo.cachedPhoto = null;
         }
-        for (ParcelFileDescriptor fd : mDiscardedRttFds) {
-            if (fd != null) {
-                try {
-                    fd.close();
-                } catch (IOException e) {
-                    // ignore
+
+        Log.addEvent(this, LogUtils.Events.DESTROYED);
+    }
+
+    private void closeRttStreams() {
+        if (mConnectionServiceToInCallStreams != null) {
+            for (ParcelFileDescriptor fd : mConnectionServiceToInCallStreams) {
+                if (fd != null) {
+                    try {
+                        fd.close();
+                    } catch (IOException e) {
+                        // ignore
+                    }
                 }
             }
         }
-        Log.addEvent(this, LogUtils.Events.DESTROYED);
+        if (mInCallToConnectionServiceStreams != null) {
+            for (ParcelFileDescriptor fd : mInCallToConnectionServiceStreams) {
+                if (fd != null) {
+                    try {
+                        fd.close();
+                    } catch (IOException e) {
+                        // ignore
+                    }
+                }
+            }
+        }
     }
 
     /** {@inheritDoc} */
@@ -924,6 +936,10 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
                 }
                 Log.addEvent(this, event, stringData);
             }
+            int statsdDisconnectCause = (newState == CallState.DISCONNECTED) ?
+                    getDisconnectCause().getCode() : DisconnectCause.UNKNOWN;
+            StatsLog.write(StatsLog.CALL_STATE_CHANGED, newState, statsdDisconnectCause,
+                    isSelfManaged(), isExternalCall());
         }
     }
 
@@ -1308,12 +1324,8 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
                 && mDidRequestToStartWithRtt && !areRttStreamsInitialized()) {
             // If the phone account got set to an RTT capable one and we haven't set the streams
             // yet, do so now.
-            setRttStreams(true);
+            createRttStreams();
             Log.i(this, "Setting RTT streams after target phone account selected");
-        } else if (!isRttSupported && !isConnectionManagerRttSupported) {
-            // If the phone account got set to RTT-incapable, unset the streams.
-            Log.i(this, "Unsetting RTT streams after target phone account selected");
-            setRttStreams(false);
         }
     }
 
@@ -1418,8 +1430,10 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
         if (changedProperties != 0) {
             int previousProperties = mConnectionProperties;
             mConnectionProperties = connectionProperties;
-            setRttStreams((mConnectionProperties & Connection.PROPERTY_IS_RTT) ==
-                    Connection.PROPERTY_IS_RTT);
+            if ((mConnectionProperties & Connection.PROPERTY_IS_RTT) ==
+                    Connection.PROPERTY_IS_RTT) {
+                createRttStreams();
+            }
             mWasHighDefAudio = (connectionProperties & Connection.PROPERTY_HIGH_DEF_AUDIO) ==
                     Connection.PROPERTY_HIGH_DEF_AUDIO;
             boolean didRttChange =
@@ -1720,7 +1734,15 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
      */
     @VisibleForTesting
     public void disconnect(long disconnectionTimeout) {
-        Log.addEvent(this, LogUtils.Events.REQUEST_DISCONNECT);
+        disconnect(disconnectionTimeout, "internal" /** callingPackage */);
+    }
+
+    /**
+     * Attempts to disconnect the call through the connection service.
+     */
+    @VisibleForTesting
+    public void disconnect(long disconnectionTimeout, String callingPackage) {
+        Log.addEvent(this, LogUtils.Events.REQUEST_DISCONNECT, callingPackage);
 
         // Track that the call is now locally disconnecting.
         setLocallyDisconnecting(true);
@@ -1809,6 +1831,31 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
     }
 
     /**
+     * Deflects the call if it is ringing.
+     *
+     * @param address address to be deflected to.
+     */
+    @VisibleForTesting
+    public void deflect(Uri address) {
+        // Check to verify that the call is still in the ringing state. A call can change states
+        // between the time the user hits 'deflect' and Telecomm receives the command.
+        if (isRinging("deflect")) {
+            // At this point, we are asking the connection service to deflect but we don't assume
+            // that it will work. Instead, we wait until confirmation from the connection service
+            // that the call is in a non-STATE_RINGING state before changing the UI. See
+            // {@link ConnectionServiceAdapter#setActive} and other set* methods.
+            mVideoStateHistory |= mVideoState;
+            if (mConnectionService != null) {
+                mConnectionService.deflect(this, address);
+            } else {
+                Log.e(this, new NullPointerException(),
+                        "deflect call failed due to null CS callId=%s", getId());
+            }
+            Log.addEvent(this, LogUtils.Events.REQUEST_DEFLECT, Log.pii(address));
+        }
+    }
+
+    /**
      * Rejects the call if it is ringing.
      *
      * @param rejectWithMessage Whether to send a text message as part of the call rejection.
@@ -1816,6 +1863,17 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
      */
     @VisibleForTesting
     public void reject(boolean rejectWithMessage, String textMessage) {
+        reject(rejectWithMessage, textMessage, "internal" /** callingPackage */);
+    }
+
+    /**
+     * Rejects the call if it is ringing.
+     *
+     * @param rejectWithMessage Whether to send a text message as part of the call rejection.
+     * @param textMessage An optional text message to send as part of the rejection.
+     */
+    @VisibleForTesting
+    public void reject(boolean rejectWithMessage, String textMessage, String callingPackage) {
         // Check to verify that the call is still in the ringing state. A call can change states
         // between the time the user hits 'reject' and Telecomm receives the command.
         if (isRinging("reject")) {
@@ -1828,8 +1886,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
                 Log.e(this, new NullPointerException(),
                         "reject call failed due to null CS callId=%s", getId());
             }
-            Log.addEvent(this, LogUtils.Events.REQUEST_REJECT);
-
+            Log.addEvent(this, LogUtils.Events.REQUEST_REJECT, callingPackage);
         }
     }
 
@@ -2482,7 +2539,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
     }
 
     public void sendRttRequest() {
-        setRttStreams(true);
+        createRttStreams();
         mConnectionService.startRtt(this, getInCallToCsRttPipeForCs(), getCsToInCallRttPipeForCs());
     }
 
@@ -2491,10 +2548,9 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
                 && mConnectionServiceToInCallStreams != null;
     }
 
-    public void setRttStreams(boolean shouldBeRtt) {
-        boolean areStreamsInitialized = areRttStreamsInitialized();
-        Log.i(this, "Setting RTT streams to %b, currently %b", shouldBeRtt, areStreamsInitialized);
-        if (shouldBeRtt && !areStreamsInitialized) {
+    public void createRttStreams() {
+        if (!areRttStreamsInitialized()) {
+            Log.i(this, "Initializing RTT streams");
             try {
                 mWasEverRtt = true;
                 mInCallToConnectionServiceStreams = ParcelFileDescriptor.createReliablePipe();
@@ -2502,16 +2558,11 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
             } catch (IOException e) {
                 Log.e(this, e, "Failed to create pipes for RTT call.");
             }
-        } else if (!shouldBeRtt && areStreamsInitialized) {
-            closeRttPipes();
-            mInCallToConnectionServiceStreams = null;
-            mConnectionServiceToInCallStreams = null;
         }
     }
 
     public void onRttConnectionFailure(int reason) {
         Log.i(this, "Got RTT initiation failure with reason %d", reason);
-        setRttStreams(false);
         for (Listener l : mListeners) {
             l.onRttInitiationFailure(this, reason);
         }
@@ -2538,26 +2589,14 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
             Log.w(this, "Response ID %d does not match expected %d", id, mPendingRttRequestId);
             return;
         }
-        setRttStreams(accept);
         if (accept) {
+            createRttStreams();
             Log.i(this, "RTT request %d accepted.", id);
             mConnectionService.respondToRttRequest(
                     this, getInCallToCsRttPipeForCs(), getCsToInCallRttPipeForCs());
         } else {
             Log.i(this, "RTT request %d rejected.", id);
             mConnectionService.respondToRttRequest(this, null, null);
-        }
-    }
-
-    public void closeRttPipes() {
-        // Defer closing until the call is destroyed
-        if (mInCallToConnectionServiceStreams != null) {
-            mDiscardedRttFds.add(mInCallToConnectionServiceStreams[0]);
-            mDiscardedRttFds.add(mInCallToConnectionServiceStreams[1]);
-        }
-        if (mConnectionServiceToInCallStreams != null) {
-            mDiscardedRttFds.add(mConnectionServiceToInCallStreams[0]);
-            mDiscardedRttFds.add(mConnectionServiceToInCallStreams[1]);
         }
     }
 
