@@ -72,4 +72,8 @@ public class BluetoothHeadsetProxy {
     public boolean isInbandRingingEnabled() {
         return mBluetoothHeadset.isInbandRingingEnabled();
     }
+
+    public BluetoothHeadset getBluetoothHeadsetObj() {
+        return mBluetoothHeadset;
+    }
 }
