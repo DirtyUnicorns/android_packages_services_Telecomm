@@ -303,6 +303,14 @@ public class CallsManager extends Call.ListenerBase
 
     private Runnable mStopTone;
 
+    // Two global variables used to handle the Emergency Call when there
+    // is no room available for emergency call. Buffer the Emergency Call
+    // in mPendingMOEmerCall until the Current Active call is disconnected
+    // successfully and place the mPendingMOEmerCall followed by clearing
+    // buffer.
+    private Call mPendingMOEmerCall = null;
+    private Call mDisconnectingCall = null;
+
     /**
      * Listener to PhoneAccountRegistrar events.
      */
@@ -1322,7 +1330,7 @@ public class CallsManager extends Call.ListenerBase
         if ((isPotentialMMICode(handle) || isPotentialInCallMMICode) && !needsAccountSelection) {
             // Do not add the call if it is a potential MMI code.
             call.addListener(this);
-        } else if (!mCalls.contains(call)) {
+        } else if (!mCalls.contains(call) && mPendingMOEmerCall == null) {
             // We check if mCalls already contains the call because we could potentially be reusing
             // a call which was previously added (See {@link #reuseOutgoingCall}).
             addCall(call);
@@ -1491,7 +1499,12 @@ public class CallsManager extends Call.ListenerBase
                     disconnectSelfManagedCalls("place emerg call" /* reason */);
                 }
 
-                call.startCreateConnection(mPhoneAccountRegistrar);
+                if (mPendingMOEmerCall == null) {
+                    // If the account has been set, proceed to place the outgoing call.
+                    // Otherwise the connection will be initiated when the account is
+                    // set by the user.
+                    call.startCreateConnection(mPhoneAccountRegistrar);
+                }
             }
         } else if (mPhoneAccountRegistrar.getCallCapablePhoneAccounts(
                 requireCallCapableAccountByHandle ? call.getHandle().getScheme() : null, false,
@@ -2056,6 +2069,14 @@ public class CallsManager extends Call.ListenerBase
     void markCallAsDisconnected(Call call, DisconnectCause disconnectCause) {
         call.setDisconnectCause(disconnectCause);
         setCallState(call, CallState.DISCONNECTED, "disconnected set explicitly");
+        // Emergency MO call is still pending and current active call is
+        // disconnected succesfully. So initiating pending Emergency call
+        // now and clearing both pending and Disconnectcalls.
+        if (mPendingMOEmerCall != null && mDisconnectingCall == call) {
+            addCall(mPendingMOEmerCall);
+            mPendingMOEmerCall.startCreateConnection(mPhoneAccountRegistrar);
+            clearPendingMOEmergencyCall();
+        }
     }
 
     /**
@@ -2902,6 +2923,12 @@ public class CallsManager extends Call.ListenerBase
     }
 
     private boolean makeRoomForOutgoingCall(Call call, boolean isEmergency) {
+        // Reject If there is any Incoming Call while initiating an
+        // an Emergency Call.
+        if (isEmergency && hasMaximumManagedRingingCalls(call)) {
+            Call rinigingCall = getRingingCall();
+            rinigingCall.reject(false, null);
+        }
         if (hasMaximumLiveCalls(call)) {
             // NOTE: If the amount of live calls changes beyond 1, this logic will probably
             // have to change.
@@ -2943,6 +2970,8 @@ public class CallsManager extends Call.ListenerBase
                 call.getAnalytics().setCallIsAdditional(true);
                 liveCall.getAnalytics().setCallIsInterrupted(true);
                 liveCall.disconnect("emergency, can't hold");
+                mDisconnectingCall = liveCall;
+                mPendingMOEmerCall = call;
                 return true;
             }
 
@@ -3949,5 +3978,10 @@ public class CallsManager extends Call.ListenerBase
                 listener.onCallStateChanged(call, CallState.ACTIVE, CallState.ACTIVE);
             }
         }
+    }
+
+    public void clearPendingMOEmergencyCall() {
+        mPendingMOEmerCall = null;
+        mDisconnectingCall = null;
     }
 }
