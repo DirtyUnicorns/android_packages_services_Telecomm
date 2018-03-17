@@ -28,6 +28,7 @@ import android.util.SparseArray;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.server.telecom.bluetooth.BluetoothStateReceiver;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -50,6 +51,7 @@ public class CallAudioManager extends CallsManagerListenerBase {
 
     private final CallAudioRouteStateMachine mCallAudioRouteStateMachine;
     private final CallAudioModeStateMachine mCallAudioModeStateMachine;
+    private final BluetoothStateReceiver mBluetoothStateReceiver;
     private final CallsManager mCallsManager;
     private final InCallTonePlayer.Factory mPlayerFactory;
     private final Ringer mRinger;
@@ -67,6 +69,7 @@ public class CallAudioManager extends CallsManagerListenerBase {
             InCallTonePlayer.Factory playerFactory,
             Ringer ringer,
             RingbackPlayer ringbackPlayer,
+            BluetoothStateReceiver bluetoothStateReceiver,
             DtmfLocalTonePlayer dtmfLocalTonePlayer) {
         mActiveDialingOrConnectingCalls = new LinkedHashSet<>();
         mRingingCalls = new LinkedHashSet<>();
@@ -87,6 +90,7 @@ public class CallAudioManager extends CallsManagerListenerBase {
         mPlayerFactory = playerFactory;
         mRinger = ringer;
         mRingbackPlayer = ringbackPlayer;
+        mBluetoothStateReceiver = bluetoothStateReceiver;
         mDtmfLocalTonePlayer = dtmfLocalTonePlayer;
 
         mPlayerFactory.setCallAudioManager(this);
@@ -152,6 +156,9 @@ public class CallAudioManager extends CallsManagerListenerBase {
         }
         updateForegroundCall();
         mCalls.add(call);
+        if (mCalls.size() == 1) {
+            mBluetoothStateReceiver.setIsInCall(true);
+        }
 
         onCallEnteringState(call, call.getState());
     }
@@ -170,6 +177,9 @@ public class CallAudioManager extends CallsManagerListenerBase {
 
         updateForegroundCall();
         mCalls.remove(call);
+        if (mCalls.size() == 0) {
+            mBluetoothStateReceiver.setIsInCall(false);
+        }
 
         onCallLeavingState(call, call.getState());
     }

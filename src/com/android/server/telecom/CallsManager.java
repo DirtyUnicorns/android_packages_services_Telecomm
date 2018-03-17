@@ -57,6 +57,7 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.telecom.bluetooth.BluetoothRouteManager;
+import com.android.server.telecom.bluetooth.BluetoothStateReceiver;
 import com.android.server.telecom.callfiltering.AsyncBlockCheckFilter;
 import com.android.server.telecom.callfiltering.BlockCheckerAdapter;
 import com.android.server.telecom.callfiltering.CallFilterResultCallback;
@@ -338,6 +339,7 @@ public class CallsManager extends Call.ListenerBase
             EmergencyCallHelper emergencyCallHelper,
             InCallTonePlayer.ToneGeneratorFactory toneGeneratorFactory,
             ClockProxy clockProxy,
+            BluetoothStateReceiver bluetoothStateReceiver,
             InCallControllerFactory inCallControllerFactory) {
         mContext = context;
         mLock = lock;
@@ -393,7 +395,8 @@ public class CallsManager extends Call.ListenerBase
         mCallAudioManager = new CallAudioManager(callAudioRouteStateMachine,
                 this,new CallAudioModeStateMachine((AudioManager)
                         mContext.getSystemService(Context.AUDIO_SERVICE)),
-                playerFactory, mRinger, new RingbackPlayer(playerFactory), mDtmfLocalTonePlayer);
+                playerFactory, mRinger, new RingbackPlayer(playerFactory),
+                bluetoothStateReceiver, mDtmfLocalTonePlayer);
 
         mConnectionSvrFocusMgr = connectionServiceFocusManagerFactory.create(
                 mRequester, Looper.getMainLooper());
@@ -2560,15 +2563,17 @@ public class CallsManager extends Call.ListenerBase
     private void rejectHandoverTo(Call handoverTo) {
         Call handoverFrom = handoverTo.getHandoverSourceCall();
         Log.i(this, "rejectHandoverTo: from=%s, to=%s", handoverFrom.getId(), handoverTo.getId());
-        Log.addEvent(handoverFrom, LogUtils.Events.HANDOVER_FAILED, "from=%s, to=%s",
+        Log.addEvent(handoverFrom, LogUtils.Events.HANDOVER_FAILED, "from=%s, to=%s, rejected",
                 handoverTo.getId(), handoverFrom.getId());
-        Log.addEvent(handoverTo, LogUtils.Events.HANDOVER_FAILED, "from=%s, to=%s",
+        Log.addEvent(handoverTo, LogUtils.Events.HANDOVER_FAILED, "from=%s, to=%s, rejected",
                 handoverTo.getId(), handoverFrom.getId());
 
         // Inform the "from" Call (ie the source call) that the handover from it has
         // failed; this allows the InCallService to be notified that a handover it
         // initiated failed.
         handoverFrom.onConnectionEvent(Connection.EVENT_HANDOVER_FAILED, null);
+        handoverFrom.onHandoverFailed(android.telecom.Call.Callback.HANDOVER_FAILURE_USER_REJECTED);
+
         // Inform the "to" ConnectionService that handover to it has failed.  This
         // allows the ConnectionService the call was being handed over
         if (handoverTo.getConnectionService() != null) {
@@ -2576,6 +2581,8 @@ public class CallsManager extends Call.ListenerBase
             // early on in the handover process, the CS will be unbound and we won't be
             // able to send the call event.
             handoverTo.sendCallEvent(android.telecom.Call.EVENT_HANDOVER_FAILED, null);
+            handoverTo.getConnectionService().handoverFailed(handoverTo,
+                    android.telecom.Call.Callback.HANDOVER_FAILURE_USER_REJECTED);
         }
         handoverTo.markFinishedHandoverStateAndCleanup(HandoverState.HANDOVER_FAILED);
     }
@@ -2584,7 +2591,9 @@ public class CallsManager extends Call.ListenerBase
         Call handoverFrom = handoverTo.getHandoverSourceCall();
         Log.i(this, "acceptHandoverTo: from=%s, to=%s", handoverFrom.getId(), handoverTo.getId());
         handoverTo.setHandoverState(HandoverState.HANDOVER_ACCEPTED);
+        handoverTo.onHandoverComplete();
         handoverFrom.setHandoverState(HandoverState.HANDOVER_ACCEPTED);
+        handoverFrom.onHandoverComplete();
 
         Log.addEvent(handoverTo, LogUtils.Events.ACCEPT_HANDOVER, "from=%s, to=%s",
                 handoverFrom.getId(), handoverTo.getId());
@@ -3500,7 +3509,7 @@ public class CallsManager extends Call.ListenerBase
         boolean isHandoverToSupported = isHandoverToPhoneAccountSupported(handoverToHandle);
         if (!isHandoverFromSupported || !isHandoverToSupported) {
             handoverFromCall.onHandoverFailed(
-                    android.telecom.Call.Callback.HANDOVER_FAILURE_DEST_NOT_SUPPORTED);
+                    android.telecom.Call.Callback.HANDOVER_FAILURE_NOT_SUPPORTED);
             return;
         }
 
@@ -3731,7 +3740,7 @@ public class CallsManager extends Call.ListenerBase
                 hasEmergencyCall()) {
             Log.w(this, "acceptHandover: Handover not supported");
             notifyHandoverFailed(call,
-                    android.telecom.Call.Callback.HANDOVER_FAILURE_DEST_NOT_SUPPORTED);
+                    android.telecom.Call.Callback.HANDOVER_FAILURE_NOT_SUPPORTED);
             return;
         }
 
@@ -3739,7 +3748,7 @@ public class CallsManager extends Call.ListenerBase
         if (phoneAccount == null) {
             Log.w(this, "acceptHandover: Handover not supported. phoneAccount = null");
             notifyHandoverFailed(call,
-                    android.telecom.Call.Callback.HANDOVER_FAILURE_DEST_NOT_SUPPORTED);
+                    android.telecom.Call.Callback.HANDOVER_FAILURE_NOT_SUPPORTED);
             return;
         }
         call.setIsSelfManaged(phoneAccount.isSelfManaged());
