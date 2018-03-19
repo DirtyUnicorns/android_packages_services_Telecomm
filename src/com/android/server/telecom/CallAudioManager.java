@@ -19,13 +19,16 @@ package com.android.server.telecom;
 import android.annotation.NonNull;
 import android.media.IAudioService;
 import android.media.ToneGenerator;
+import android.os.Bundle;
 import android.telecom.CallAudioState;
 import android.telecom.Log;
 import android.telecom.VideoProfile;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.server.telecom.bluetooth.BluetoothStateReceiver;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -48,6 +51,7 @@ public class CallAudioManager extends CallsManagerListenerBase {
 
     private final CallAudioRouteStateMachine mCallAudioRouteStateMachine;
     private final CallAudioModeStateMachine mCallAudioModeStateMachine;
+    private final BluetoothStateReceiver mBluetoothStateReceiver;
     private final CallsManager mCallsManager;
     private final InCallTonePlayer.Factory mPlayerFactory;
     private final Ringer mRinger;
@@ -65,6 +69,7 @@ public class CallAudioManager extends CallsManagerListenerBase {
             InCallTonePlayer.Factory playerFactory,
             Ringer ringer,
             RingbackPlayer ringbackPlayer,
+            BluetoothStateReceiver bluetoothStateReceiver,
             DtmfLocalTonePlayer dtmfLocalTonePlayer) {
         mActiveDialingOrConnectingCalls = new LinkedHashSet<>();
         mRingingCalls = new LinkedHashSet<>();
@@ -85,6 +90,7 @@ public class CallAudioManager extends CallsManagerListenerBase {
         mPlayerFactory = playerFactory;
         mRinger = ringer;
         mRingbackPlayer = ringbackPlayer;
+        mBluetoothStateReceiver = bluetoothStateReceiver;
         mDtmfLocalTonePlayer = dtmfLocalTonePlayer;
 
         mPlayerFactory.setCallAudioManager(this);
@@ -112,8 +118,10 @@ public class CallAudioManager extends CallsManagerListenerBase {
             playToneForDisconnectedCall(call);
         }
 
-        onCallLeavingState(call, oldState);
-        onCallEnteringState(call, newState);
+        if (!isIntermediateConfURICallDisconnected(call)) {
+            onCallLeavingState(call, oldState);
+            onCallEnteringState(call, newState);
+        }
     }
 
     @Override
@@ -148,6 +156,9 @@ public class CallAudioManager extends CallsManagerListenerBase {
         }
         updateForegroundCall();
         mCalls.add(call);
+        if (mCalls.size() == 1) {
+            mBluetoothStateReceiver.setIsInCall(true);
+        }
 
         onCallEnteringState(call, call.getState());
     }
@@ -166,6 +177,9 @@ public class CallAudioManager extends CallsManagerListenerBase {
 
         updateForegroundCall();
         mCalls.remove(call);
+        if (mCalls.size() == 0) {
+            mBluetoothStateReceiver.setIsInCall(false);
+        }
 
         onCallLeavingState(call, call.getState());
     }
@@ -373,6 +387,19 @@ public class CallAudioManager extends CallsManagerListenerBase {
         }
         mCallAudioRouteStateMachine.sendMessageWithSessionInfo(
                 CallAudioRouteStateMachine.TOGGLE_MUTE);
+    }
+
+    private boolean isIntermediateConfURICallDisconnected(Call disconnectedCall) {
+        if(disconnectedCall.getState() != CallState.DISCONNECTED) {
+            return false;
+        }
+        Bundle callExtra = (disconnectedCall != null) ? disconnectedCall.getIntentExtras() : null;
+        final boolean isMoConfURICallDisconnected = (callExtra == null) ? false :
+                !disconnectedCall.isIncoming() &&
+                callExtra.getBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false);
+        Log.i(this, "is ConfURI call disconnected = " + isMoConfURICallDisconnected + " call = "
+                + disconnectedCall);
+        return isMoConfURICallDisconnected && !mCallsManager.hasOnlyDisconnectedCalls();
     }
 
     @VisibleForTesting
