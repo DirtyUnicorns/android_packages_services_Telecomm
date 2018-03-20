@@ -1353,6 +1353,17 @@ public class ConnectionServiceWrapper extends ServiceBinder implements
         }
     }
 
+    void addParticipantWithConference(Call call, String recipients) {
+        final String callId = mCallIdMapper.getCallId(call);
+            if (isServiceValid("addParticipantWithConference")) {
+                try {
+                    logOutgoing("addParticipantWithConference %s, %s", recipients, callId);
+                    mServiceInterface.addParticipantWithConference(callId, recipients);
+                } catch (RemoteException ignored) {
+                }
+        }
+    }
+
     void mergeConference(Call call) {
         final String callId = mCallIdMapper.getCallId(call);
         if (callId != null && isServiceValid("mergeConference")) {
@@ -1602,8 +1613,16 @@ public class ConnectionServiceWrapper extends ServiceBinder implements
                 @Override
                 public void onSuccess() {
                     Log.d(this, "Adding simService %s", currentSimService.getComponentName());
-                    simServiceComponentNames.add(currentSimService.getComponentName());
-                    simServiceBinders.add(currentSimService.mServiceInterface.asBinder());
+                    if (currentSimService.mServiceInterface == null) {
+                        // The remote ConnectionService died, so do not add it.
+                        // We will still perform maybeComplete() and notify the caller with an empty
+                        // list of sim services via maybeComplete().
+                        Log.w(this, "queryRemoteConnectionServices: simService %s died - Skipping.",
+                                currentSimService.getComponentName());
+                    } else {
+                        simServiceComponentNames.add(currentSimService.getComponentName());
+                        simServiceBinders.add(currentSimService.mServiceInterface.asBinder());
+                    }
                     maybeComplete();
                 }
 
