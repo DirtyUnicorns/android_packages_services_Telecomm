@@ -982,7 +982,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
         }
     }
 
-    int getHandlePresentation() {
+    public int getHandlePresentation() {
         return mHandlePresentation;
     }
 
@@ -1617,6 +1617,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
 
         setConnectionCapabilities(connection.getConnectionCapabilities());
         setConnectionProperties(connection.getConnectionProperties());
+        setIsVoipAudioMode(connection.getIsVoipAudioMode());
         setSupportedAudioRoutes(connection.getSupportedAudioRoutes());
         setVideoProvider(connection.getVideoProvider());
         setVideoState(connection.getVideoState());
