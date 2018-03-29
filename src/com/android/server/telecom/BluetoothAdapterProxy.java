@@ -37,4 +37,10 @@ public class BluetoothAdapterProxy {
         }
         return mBluetoothAdapter.getProfileProxy(context, listener, profile);
     }
+    public void closeProfileProxy(int profile, BluetoothProfile proxy) {
+        if (mBluetoothAdapter == null) {
+            return;
+        }
+        mBluetoothAdapter.closeProfileProxy(profile, proxy);
+    }
 }
