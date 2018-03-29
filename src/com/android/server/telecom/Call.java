@@ -2993,7 +2993,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
         return mOriginalConnectionId;
     }
 
-    ConnectionServiceFocusManager getConnectionServiceFocusManager() {
+    public ConnectionServiceFocusManager getConnectionServiceFocusManager() {
         return mCallsManager.getConnectionServiceFocusManager();
     }
 
