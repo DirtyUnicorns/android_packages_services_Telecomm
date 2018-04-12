@@ -17,6 +17,7 @@
 package com.android.server.telecom;
 
 import android.app.ActivityManager;
+import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.pm.UserInfo;
@@ -1917,8 +1918,8 @@ public class CallsManager extends Call.ListenerBase
     }
 
     private boolean isRttSettingOn() {
-        return Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.RTT_CALLING_MODE, 0) != 0;
+        return Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.RTT_CALLING_MODE, 0) != 0;
     }
 
     void phoneAccountSelected(Call call, PhoneAccountHandle account, boolean setDefault) {
@@ -3277,6 +3278,21 @@ public class CallsManager extends Call.ListenerBase
         }
     }
 
+    public boolean isReplyWithSmsAllowed(int uid) {
+        UserHandle callingUser = UserHandle.of(UserHandle.getUserId(uid));
+        UserManager userManager = mContext.getSystemService(UserManager.class);
+        KeyguardManager keyguardManager = mContext.getSystemService(KeyguardManager.class);
+
+        boolean isUserRestricted = userManager != null
+                && userManager.hasUserRestriction(UserManager.DISALLOW_SMS, callingUser);
+        boolean isLockscreenRestricted = keyguardManager != null
+                && keyguardManager.isDeviceLocked();
+        Log.d(this, "isReplyWithSmsAllowed: isUserRestricted: %s, isLockscreenRestricted: %s",
+                isUserRestricted, isLockscreenRestricted);
+
+        // TODO(hallliu): actually check the lockscreen once b/77731473 is fixed
+        return !isUserRestricted;
+    }
     /**
      * Blocks execution until all Telecom handlers have completed their current work.
      */
