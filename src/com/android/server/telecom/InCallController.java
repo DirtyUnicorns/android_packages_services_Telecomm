@@ -1310,7 +1310,6 @@ public class InCallController extends CallsManagerListenerBase {
         try {
             inCallService.setInCallAdapter(
                     new InCallAdapter(
-                            mContext,
                             mCallsManager,
                             mCallIdMapper,
                             mLock,
