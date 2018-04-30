@@ -17,6 +17,7 @@
 package com.android.server.telecom;
 
 import android.app.ActivityManager;
+import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.pm.UserInfo;
@@ -302,6 +303,14 @@ public class CallsManager extends Call.ListenerBase
     private TelephonyManager.MultiSimVariants mRadioSimVariants = null;
 
     private Runnable mStopTone;
+
+    // Two global variables used to handle the Emergency Call when there
+    // is no room available for emergency call. Buffer the Emergency Call
+    // in mPendingMOEmerCall until the Current Active call is disconnected
+    // successfully and place the mPendingMOEmerCall followed by clearing
+    // buffer.
+    private Call mPendingMOEmerCall = null;
+    private Call mDisconnectingCall = null;
 
     /**
      * Listener to PhoneAccountRegistrar events.
@@ -1322,7 +1331,7 @@ public class CallsManager extends Call.ListenerBase
         if ((isPotentialMMICode(handle) || isPotentialInCallMMICode) && !needsAccountSelection) {
             // Do not add the call if it is a potential MMI code.
             call.addListener(this);
-        } else if (!mCalls.contains(call)) {
+        } else if (!mCalls.contains(call) && mPendingMOEmerCall == null) {
             // We check if mCalls already contains the call because we could potentially be reusing
             // a call which was previously added (See {@link #reuseOutgoingCall}).
             addCall(call);
@@ -1487,14 +1496,16 @@ public class CallsManager extends Call.ListenerBase
                 notifyCreateConnectionFailed(call.getTargetPhoneAccount(), call);
             } else {
                 if (call.isEmergencyCall()) {
-                    // Disconnect calls from other ConnectionServices other than the one the
-                    // emergency call targets.
-                    // Except, do not disconnect calls from the Connection Manager's
-                    // ConnectionService.
-                    disconnectCallsHaveDifferentConnectionService(call);
+                    // Drop any ongoing self-managed calls to make way for an emergency call.
+                    disconnectSelfManagedCalls("place emerg call" /* reason */);
                 }
 
-                call.startCreateConnection(mPhoneAccountRegistrar);
+                if (mPendingMOEmerCall == null) {
+                    // If the account has been set, proceed to place the outgoing call.
+                    // Otherwise the connection will be initiated when the account is
+                    // set by the user.
+                    call.startCreateConnection(mPhoneAccountRegistrar);
+                }
             }
         } else if (mPhoneAccountRegistrar.getCallCapablePhoneAccounts(
                 requireCallCapableAccountByHandle ? call.getHandle().getScheme() : null, false,
@@ -1907,8 +1918,8 @@ public class CallsManager extends Call.ListenerBase
     }
 
     private boolean isRttSettingOn() {
-        return Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.RTT_CALLING_MODE, 0) != 0;
+        return Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.RTT_CALLING_MODE, 0) != 0;
     }
 
     void phoneAccountSelected(Call call, PhoneAccountHandle account, boolean setDefault) {
@@ -2059,6 +2070,14 @@ public class CallsManager extends Call.ListenerBase
     void markCallAsDisconnected(Call call, DisconnectCause disconnectCause) {
         call.setDisconnectCause(disconnectCause);
         setCallState(call, CallState.DISCONNECTED, "disconnected set explicitly");
+        // Emergency MO call is still pending and current active call is
+        // disconnected succesfully. So initiating pending Emergency call
+        // now and clearing both pending and Disconnectcalls.
+        if (mPendingMOEmerCall != null && mDisconnectingCall == call) {
+            addCall(mPendingMOEmerCall);
+            mPendingMOEmerCall.startCreateConnection(mPhoneAccountRegistrar);
+            clearPendingMOEmergencyCall();
+        }
     }
 
     /**
@@ -2905,6 +2924,12 @@ public class CallsManager extends Call.ListenerBase
     }
 
     private boolean makeRoomForOutgoingCall(Call call, boolean isEmergency) {
+        // Reject If there is any Incoming Call while initiating an
+        // an Emergency Call.
+        if (isEmergency && hasMaximumManagedRingingCalls(call)) {
+            Call rinigingCall = getRingingCall();
+            rinigingCall.reject(false, null);
+        }
         if (hasMaximumLiveCalls(call)) {
             // NOTE: If the amount of live calls changes beyond 1, this logic will probably
             // have to change.
@@ -2946,6 +2971,8 @@ public class CallsManager extends Call.ListenerBase
                 call.getAnalytics().setCallIsAdditional(true);
                 liveCall.getAnalytics().setCallIsInterrupted(true);
                 liveCall.disconnect("emergency, can't hold");
+                mDisconnectingCall = liveCall;
+                mPendingMOEmerCall = call;
                 return true;
             }
 
@@ -3251,6 +3278,21 @@ public class CallsManager extends Call.ListenerBase
         }
     }
 
+    public boolean isReplyWithSmsAllowed(int uid) {
+        UserHandle callingUser = UserHandle.of(UserHandle.getUserId(uid));
+        UserManager userManager = mContext.getSystemService(UserManager.class);
+        KeyguardManager keyguardManager = mContext.getSystemService(KeyguardManager.class);
+
+        boolean isUserRestricted = userManager != null
+                && userManager.hasUserRestriction(UserManager.DISALLOW_SMS, callingUser);
+        boolean isLockscreenRestricted = keyguardManager != null
+                && keyguardManager.isDeviceLocked();
+        Log.d(this, "isReplyWithSmsAllowed: isUserRestricted: %s, isLockscreenRestricted: %s",
+                isUserRestricted, isLockscreenRestricted);
+
+        // TODO(hallliu): actually check the lockscreen once b/77731473 is fixed
+        return !isUserRestricted;
+    }
     /**
      * Blocks execution until all Telecom handlers have completed their current work.
      */
@@ -3364,16 +3406,6 @@ public class CallsManager extends Call.ListenerBase
         // speakerphone that we'll switch back to earpiece for the managed call which necessitated
         // disconnecting the self-managed calls.
         mCallAudioManager.switchBaseline();
-    }
-
-    private void disconnectCallsHaveDifferentConnectionService(Call exceptCall) {
-        String csPackage = exceptCall.getConnectionService() != null ?
-                exceptCall.getConnectionService().getComponentName().toShortString() : "null";
-        mCalls.stream().filter(c ->
-                c.getConnectionService() != exceptCall.getConnectionService()
-                        && c.getConnectionManagerPhoneAccount()
-                        != exceptCall.getConnectionManagerPhoneAccount())
-                .forEach(c -> c.disconnect("CS not " + csPackage));
     }
 
     /**
@@ -3962,5 +3994,10 @@ public class CallsManager extends Call.ListenerBase
                 listener.onCallStateChanged(call, CallState.ACTIVE, CallState.ACTIVE);
             }
         }
+    }
+
+    public void clearPendingMOEmergencyCall() {
+        mPendingMOEmerCall = null;
+        mDisconnectingCall = null;
     }
 }

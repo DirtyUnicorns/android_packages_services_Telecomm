@@ -96,6 +96,12 @@ class InCallAdapter extends IInCallAdapter.Stub {
     public void rejectCall(String callId, boolean rejectWithMessage, String textMessage) {
         try {
             Log.startSession(LogUtils.Sessions.ICA_REJECT_CALL, mOwnerComponentName);
+            // Check to make sure the in-call app's user isn't restricted from sending SMS. If so,
+            // silently drop the outgoing message. Also drop message if the screen is locked.
+            if (!mCallsManager.isReplyWithSmsAllowed(Binder.getCallingUid())) {
+                rejectWithMessage = false;
+                textMessage = null;
+            }
             long token = Binder.clearCallingIdentity();
             try {
                 synchronized (mLock) {

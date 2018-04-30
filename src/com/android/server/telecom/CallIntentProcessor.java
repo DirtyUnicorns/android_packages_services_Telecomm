@@ -106,9 +106,9 @@ public class CallIntentProcessor {
                 TelephonyProperties.EXTRA_SKIP_SCHEMA_PARSING, false);
         Log.d(CallIntentProcessor.class, "isSkipSchemaParsing = " + isSkipSchemaParsing);
 
-        if (!PhoneAccount.SCHEME_VOICEMAIL.equals(scheme) && !isSkipSchemaParsing) {
-            handle = Uri.fromParts(PhoneNumberUtils.isUriNumber(uriString) ?
-                    PhoneAccount.SCHEME_SIP : PhoneAccount.SCHEME_TEL, uriString, null);
+        // Ensure sip URIs dialed using TEL scheme get converted to SIP scheme.
+        if (PhoneAccount.SCHEME_TEL.equals(scheme) && PhoneNumberUtils.isUriNumber(uriString) && !isSkipSchemaParsing) {
+            handle = Uri.fromParts(PhoneAccount.SCHEME_SIP, uriString, null);
         }
 
         PhoneAccountHandle phoneAccountHandle = intent.getParcelableExtra(
@@ -200,6 +200,7 @@ public class CallIntentProcessor {
         final boolean success = result == DisconnectCause.NOT_DISCONNECTED;
 
         if (!success && call != null) {
+            callsManager.clearPendingMOEmergencyCall();
             disconnectCallAndShowErrorDialog(context, call, result);
         }
     }
