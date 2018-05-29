@@ -18,6 +18,7 @@ package com.android.server.telecom.bluetooth;
 
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
+import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -127,6 +128,10 @@ public class BluetoothDeviceManager {
 
     public void setHeadsetServiceForTesting(BluetoothHeadsetProxy bluetoothHeadset) {
         mBluetoothHeadsetService = bluetoothHeadset;
+    }
+
+    public BluetoothDevice getDeviceFromAddress(String address) {
+        return mConnectedDevicesByAddress.get(address);
     }
 
     void onDeviceConnected(BluetoothDevice device) {

@@ -1176,6 +1176,11 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
             return false;
         }
 
+        if (getHandle() == null) {
+            // No point in logging a null-handle call. Some self-managed calls will have this.
+            return false;
+        }
+
         if (!PhoneAccount.SCHEME_SIP.equals(getHandle().getScheme()) &&
                 !PhoneAccount.SCHEME_TEL.equals(getHandle().getScheme())) {
             // Can't log schemes other than SIP or TEL for now.
@@ -1459,6 +1464,7 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
             if ((mConnectionProperties & Connection.PROPERTY_IS_RTT) ==
                     Connection.PROPERTY_IS_RTT) {
                 createRttStreams();
+                mWasEverRtt = true;
                 if (isEmergencyCall()) {
                     mCallsManager.setAudioRoute(CallAudioState.ROUTE_SPEAKER, null);
                     mCallsManager.mute(false);
@@ -2609,7 +2615,6 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
         if (!areRttStreamsInitialized()) {
             Log.i(this, "Initializing RTT streams");
             try {
-                mWasEverRtt = true;
                 mInCallToConnectionServiceStreams = ParcelFileDescriptor.createReliablePipe();
                 mConnectionServiceToInCallStreams = ParcelFileDescriptor.createReliablePipe();
             } catch (IOException e) {
