@@ -218,8 +218,6 @@ public class BluetoothRouteManager extends StateMachine {
             sendMessageDelayed(CONNECTION_TIMEOUT, args,
                     mTimeoutsAdapter.getBluetoothPendingTimeoutMillis(
                             mContext.getContentResolver()));
-            // Pretend like audio is connected when communicating w/ CARSM.
-            mListener.onBluetoothAudioConnected();
         }
 
         @Override
