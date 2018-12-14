@@ -1711,6 +1711,9 @@ public class Call implements CreateConnectionResponse, EventManager.Loggable,
                     listener.onFailedUnknownCall(this);
                 }
                 break;
+            case CALL_DIRECTION_UNDEFINED:
+                mCallsManager.markCallAsRemoved(this);
+                break;
         }
     }
 
