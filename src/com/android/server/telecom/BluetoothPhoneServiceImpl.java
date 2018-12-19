@@ -441,6 +441,7 @@ public class BluetoothPhoneServiceImpl {
                     synchronized (mLock) {
                         Log.w(TAG, "onServiceConnected: setting mBluetoothHeadset");
                         setBluetoothHeadset(new BluetoothHeadsetProxy((BluetoothHeadset) proxy));
+                        updateHeadsetWithCallState(true /* force */);
                     }
                 }
 
