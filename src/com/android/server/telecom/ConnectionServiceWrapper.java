@@ -36,6 +36,7 @@ import android.telecom.Log;
 import android.telecom.Logging.Session;
 import android.telecom.ParcelableConference;
 import android.telecom.ParcelableConnection;
+import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.StatusHints;
 import android.telecom.TelecomManager;
@@ -811,9 +812,21 @@ public class ConnectionServiceWrapper extends ServiceBinder implements
                     // Make sure that the PhoneAccount associated with the incoming
                     // ParcelableConnection is in fact registered to Telecom and is being called
                     // from the correct user.
-                    List<PhoneAccountHandle> accountHandles =
-                            mPhoneAccountRegistrar.getCallCapablePhoneAccounts(null /*uriScheme*/,
-                                    false /*includeDisabledAccounts*/, userHandle);
+                    PhoneAccount callingPhoneAccount = mPhoneAccountRegistrar.getPhoneAccount(
+                            callingPhoneAccountHandle, userHandle);
+                    List<PhoneAccountHandle> accountHandles = null;
+                    // If the emergency account is flagged as emergency calls only
+                    // in which case we need to consider all phone accounts
+                    if (callingPhoneAccount != null && callingPhoneAccount.hasCapabilities(
+                           PhoneAccount.CAPABILITY_EMERGENCY_CALLS_ONLY)) {
+                        accountHandles =
+                                mPhoneAccountRegistrar.getAllPhoneAccountHandles(userHandle);
+                    } else {
+                        accountHandles = mPhoneAccountRegistrar.getCallCapablePhoneAccounts(
+                                null /*uriScheme*/, false /*includeDisabledAccounts*/,
+                                        userHandle);
+                    }
+
                     PhoneAccountHandle phoneAccountHandle = null;
                     for (PhoneAccountHandle accountHandle : accountHandles) {
                         if(accountHandle.equals(callingPhoneAccountHandle)) {
