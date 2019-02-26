@@ -36,6 +36,7 @@ import android.telecom.Log;
 import android.telecom.Logging.Session;
 import android.telecom.ParcelableConference;
 import android.telecom.ParcelableConnection;
+import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.StatusHints;
 import android.telecom.TelecomManager;
@@ -138,6 +139,26 @@ public class ConnectionServiceWrapper extends ServiceBinder implements
             } catch (Throwable t) {
                 Log.e(ConnectionServiceWrapper.this, t, "");
                 throw t;
+            } finally {
+                Binder.restoreCallingIdentity(token);
+                Log.endSession();
+            }
+        }
+
+        @Override
+        public void resetCdmaConnectionTime(String callId, Session.Info sessionInfo) {
+            Log.startSession(sessionInfo, "CSW.rCCT");
+            long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    logIncoming("resetCdmaConnectionTime %s", callId);
+                    Call call = mCallIdMapper.getCall(callId);
+                    if (call != null) {
+                        mCallsManager.resetCdmaConnectionTime(call);
+                    } else {
+                        // Log.w(this, "resetCdmaConnectionTime, unknown call id: %s", msg.obj);
+                    }
+                }
             } finally {
                 Binder.restoreCallingIdentity(token);
                 Log.endSession();
@@ -791,9 +812,21 @@ public class ConnectionServiceWrapper extends ServiceBinder implements
                     // Make sure that the PhoneAccount associated with the incoming
                     // ParcelableConnection is in fact registered to Telecom and is being called
                     // from the correct user.
-                    List<PhoneAccountHandle> accountHandles =
-                            mPhoneAccountRegistrar.getCallCapablePhoneAccounts(null /*uriScheme*/,
-                                    false /*includeDisabledAccounts*/, userHandle);
+                    PhoneAccount callingPhoneAccount = mPhoneAccountRegistrar.getPhoneAccount(
+                            callingPhoneAccountHandle, userHandle);
+                    List<PhoneAccountHandle> accountHandles = null;
+                    // If the emergency account is flagged as emergency calls only
+                    // in which case we need to consider all phone accounts
+                    if (callingPhoneAccount != null && callingPhoneAccount.hasCapabilities(
+                           PhoneAccount.CAPABILITY_EMERGENCY_CALLS_ONLY)) {
+                        accountHandles =
+                                mPhoneAccountRegistrar.getAllPhoneAccountHandles(userHandle);
+                    } else {
+                        accountHandles = mPhoneAccountRegistrar.getCallCapablePhoneAccounts(
+                                null /*uriScheme*/, false /*includeDisabledAccounts*/,
+                                        userHandle);
+                    }
+
                     PhoneAccountHandle phoneAccountHandle = null;
                     for (PhoneAccountHandle accountHandle : accountHandles) {
                         if(accountHandle.equals(callingPhoneAccountHandle)) {
@@ -1449,6 +1482,17 @@ public class ConnectionServiceWrapper extends ServiceBinder implements
                 mServiceInterface.splitFromConference(callId, Log.getExternalSession());
             } catch (RemoteException ignored) {
             }
+        }
+    }
+
+    void addParticipantWithConference(Call call, String recipients) {
+        final String callId = mCallIdMapper.getCallId(call);
+            if (isServiceValid("addParticipantWithConference")) {
+                try {
+                    logOutgoing("addParticipantWithConference %s, %s", recipients, callId);
+                    mServiceInterface.addParticipantWithConference(callId, recipients);
+                } catch (RemoteException ignored) {
+                }
         }
     }
 

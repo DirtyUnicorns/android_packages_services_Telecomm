@@ -1,5 +1,6 @@
 package com.android.server.telecom;
 
+import com.android.internal.telephony.TelephonyProperties;
 import com.android.server.telecom.components.ErrorDialogActivity;
 
 import android.content.Context;
@@ -19,6 +20,7 @@ import android.telephony.DisconnectCause;
 import android.telephony.PhoneNumberUtils;
 import android.widget.Toast;
 
+import org.codeaurora.ims.QtiCallConstants;
 /**
  * Single point of entry for all outgoing and incoming calls.
  * {@link com.android.server.telecom.components.UserCallIntentProcessor} serves as a trampoline that
@@ -100,9 +102,12 @@ public class CallIntentProcessor {
         Uri handle = intent.getData();
         String scheme = handle.getScheme();
         String uriString = handle.getSchemeSpecificPart();
+        boolean isSkipSchemaParsing = intent.getBooleanExtra(
+                TelephonyProperties.EXTRA_SKIP_SCHEMA_PARSING, false);
+        Log.d(CallIntentProcessor.class, "isSkipSchemaParsing = " + isSkipSchemaParsing);
 
         // Ensure sip URIs dialed using TEL scheme get converted to SIP scheme.
-        if (PhoneAccount.SCHEME_TEL.equals(scheme) && PhoneNumberUtils.isUriNumber(uriString)) {
+        if (PhoneAccount.SCHEME_TEL.equals(scheme) && PhoneNumberUtils.isUriNumber(uriString) && !isSkipSchemaParsing) {
             handle = Uri.fromParts(PhoneAccount.SCHEME_SIP, uriString, null);
         }
 
@@ -116,12 +121,34 @@ public class CallIntentProcessor {
         if (clientExtras == null) {
             clientExtras = new Bundle();
         }
+        if (isSkipSchemaParsing) {
+            clientExtras.putBoolean(TelephonyProperties.EXTRA_SKIP_SCHEMA_PARSING,
+                    isSkipSchemaParsing);
+            handle = Uri.fromParts(PhoneAccount.SCHEME_TEL, handle.toString(), null);
+        }
+        boolean isConferenceUri = intent.getBooleanExtra(
+                TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, false);
+        Log.d(CallIntentProcessor.class, "isConferenceUri = "+isConferenceUri);
+        if (isConferenceUri) {
+            clientExtras.putBoolean(TelephonyProperties.EXTRA_DIAL_CONFERENCE_URI, isConferenceUri);
+        }
+        boolean isAddParticipant = intent.getBooleanExtra(
+                TelephonyProperties.ADD_PARTICIPANT_KEY, false);
+        Log.d(CallIntentProcessor.class, "isAddparticipant = "+isAddParticipant);
+        if (isAddParticipant) {
+            clientExtras.putBoolean(TelephonyProperties.ADD_PARTICIPANT_KEY, isAddParticipant);
+        }
 
         // Ensure call subject is passed on to the connection service.
         if (intent.hasExtra(TelecomManager.EXTRA_CALL_SUBJECT)) {
             String callsubject = intent.getStringExtra(TelecomManager.EXTRA_CALL_SUBJECT);
             clientExtras.putString(TelecomManager.EXTRA_CALL_SUBJECT, callsubject);
         }
+
+        final int callDomain = intent.getIntExtra(
+                QtiCallConstants.EXTRA_CALL_DOMAIN, QtiCallConstants.DOMAIN_AUTOMATIC);
+        Log.d(CallIntentProcessor.class, "callDomain = " + callDomain);
+        clientExtras.putInt(QtiCallConstants.EXTRA_CALL_DOMAIN, callDomain);
 
         final int videoState = intent.getIntExtra( TelecomManager.EXTRA_START_CALL_WITH_VIDEO_STATE,
                 VideoProfile.STATE_AUDIO_ONLY);
@@ -139,6 +166,11 @@ public class CallIntentProcessor {
             Log.i(CallIntentProcessor.class,
                     "processOutgoingCallIntent: skip initiating user check");
         }
+
+        Log.d(CallIntentProcessor.class, " processOutgoingCallIntent handle = " + handle
+                + ", scheme = " + scheme + ", uriString = " + uriString
+                + ", isSkipSchemaParsing = " + isSkipSchemaParsing
+                + ", isAddParticipant = " + isAddParticipant);
 
         UserHandle initiatingUser = intent.getParcelableExtra(KEY_INITIATING_USER);
 
@@ -168,6 +200,7 @@ public class CallIntentProcessor {
         final boolean success = result == DisconnectCause.NOT_DISCONNECTED;
 
         if (!success && call != null) {
+            callsManager.clearPendingMOEmergencyCall();
             disconnectCallAndShowErrorDialog(context, call, result);
         }
     }

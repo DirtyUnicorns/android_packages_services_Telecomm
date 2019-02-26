@@ -31,14 +31,20 @@ import android.os.RemoteException;
 import android.telecom.Connection;
 import android.telecom.Log;
 import android.telecom.PhoneAccount;
+import android.telecom.PhoneAccountHandle;
 import android.telecom.VideoProfile;
 import android.telephony.PhoneNumberUtils;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
+import android.os.UserHandle;
+
+import android.telecom.TelecomManager;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.telecom.CallsManager.CallsManagerListener;
 
+import java.lang.NumberFormatException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -86,6 +92,7 @@ public class BluetoothPhoneServiceImpl {
     private int mRingingAddressType = 0;
     private Call mOldHeldCall = null;
     private boolean mIsDisconnectedTonePlaying = false;
+    private boolean isAnswercallInProgress = false;
 
     /**
      * Binder implementation of IBluetoothHeadsetPhone. Implements the command interface that the
@@ -103,7 +110,11 @@ public class BluetoothPhoneServiceImpl {
                     Log.i(TAG, "BT - answering call");
                     Call call = mCallsManager.getRingingCall();
                     if (call != null) {
-                        mCallsManager.answerCall(call, VideoProfile.STATE_AUDIO_ONLY);
+                        if (!isAnswercallInProgress) {
+                            mCallsManager.answerCall(call, VideoProfile.STATE_AUDIO_ONLY);
+                            Log.i(TAG, "isAnswercallInProgress:" + isAnswercallInProgress);
+                            isAnswercallInProgress = true;
+                        }
                         return true;
                     }
                     return false;
@@ -168,14 +179,30 @@ public class BluetoothPhoneServiceImpl {
                 long token = Binder.clearCallingIdentity();
                 try {
                     Log.i(TAG, "getNetworkOperator");
+                    String label = null;
                     PhoneAccount account = getBestPhoneAccount();
-                    if (account != null && account.getLabel() != null) {
-                        return account.getLabel().toString();
+                    if (account != null) {
+                        PhoneAccountHandle ph = account.getAccountHandle();
+                        if (ph != null) {
+                            String subId = ph.getId();
+                            int sub;
+                            try {
+                                sub = Integer.parseInt(subId);
+                            } catch (NumberFormatException e){
+                                Log.w(this, " NumberFormatException " + e);
+                                sub = SubscriptionManager.getDefaultVoiceSubscriptionId();
+                            }
+                            label = TelephonyManager.from(mContext)
+                                    .getNetworkOperatorName(sub);
+                        } else {
+                            Log.w(this, "Phone Account Handle is NULL");
+                        }
                     } else {
                         // Finally, just get the network name from telephony.
-                        return TelephonyManager.from(mContext)
+                         label = TelephonyManager.from(mContext)
                                 .getNetworkOperatorName();
                     }
+                    return label;
                 } finally {
                     Binder.restoreCallingIdentity(token);
                     Log.endSession();
@@ -332,6 +359,11 @@ public class BluetoothPhoneServiceImpl {
             if (call.isExternalCall()) {
                 return;
             }
+
+            if (oldState == CallState.RINGING && newState != oldState) {
+                Log.i(TAG, "making flag isAnswercallInProgress from true to false:");
+                isAnswercallInProgress = false;
+            }
             // If a call is being put on hold because of a new connecting call, ignore the
             // CONNECTING since the BT state update needs to send out the numHeld = 1 + dialing
             // state atomically.
@@ -407,6 +439,7 @@ public class BluetoothPhoneServiceImpl {
                 @Override
                 public void onServiceConnected(int profile, BluetoothProfile proxy) {
                     synchronized (mLock) {
+                        Log.w(TAG, "onServiceConnected: setting mBluetoothHeadset");
                         setBluetoothHeadset(new BluetoothHeadsetProxy((BluetoothHeadset) proxy));
                         updateHeadsetWithCallState(true /* force */);
                     }
@@ -415,7 +448,12 @@ public class BluetoothPhoneServiceImpl {
                 @Override
                 public void onServiceDisconnected(int profile) {
                     synchronized (mLock) {
-                        mBluetoothHeadset = null;
+                        if (mBluetoothHeadset != null) {
+                            mBluetoothAdapter.closeProfileProxy(BluetoothProfile.HEADSET,
+                                    (BluetoothProfile)(mBluetoothHeadset.getBluetoothHeadsetObj()));
+                            Log.w(TAG, "onServiceDisconnected: setting mBluetoothHeadet to null");
+                            mBluetoothHeadset = null;
+                        }
                     }
                 }
             };
@@ -433,9 +471,20 @@ public class BluetoothPhoneServiceImpl {
                 Log.d(TAG, "Bluetooth Adapter state: %d", state);
                 if (state == BluetoothAdapter.STATE_ON) {
                     try {
+                        Log.w(TAG, "Calling get Profile proxy");
+                        mBluetoothAdapter.getProfileProxy(context, mProfileListener,
+                                                 BluetoothProfile.HEADSET);
+                        Log.w(TAG, "Done Calling get Profile proxy");
                         mBinder.queryPhoneState();
                     } catch (RemoteException e) {
                         // Remote exception not expected
+                    }
+                } else if(state == BluetoothAdapter.STATE_OFF) {
+                    if (mBluetoothHeadset != null) {
+                        mBluetoothAdapter.closeProfileProxy(BluetoothProfile.HEADSET,
+                                        (BluetoothProfile)(mBluetoothHeadset.getBluetoothHeadsetObj()));
+                        Log.w(TAG, "setting mBluetoothHeadet to null");
+                        mBluetoothHeadset = null;
                     }
                 }
             }
@@ -513,14 +562,23 @@ public class BluetoothPhoneServiceImpl {
             if (activeCall != null) {
                 mCallsManager.disconnectCall(activeCall);
                 if (ringingCall != null) {
-                    mCallsManager.answerCall(ringingCall, VideoProfile.STATE_AUDIO_ONLY);
+                    if (!isAnswercallInProgress) {
+                        mCallsManager.answerCall(ringingCall, VideoProfile.STATE_AUDIO_ONLY);
+                        Log.i(TAG, "CHLD = 1 :isAnswercallInProgress:" + isAnswercallInProgress);
+                        isAnswercallInProgress = true;
+                    }
                 } else if (heldCall != null) {
                     mCallsManager.unholdCall(heldCall);
                 }
                 return true;
             }
             if (ringingCall != null) {
-                mCallsManager.answerCall(ringingCall, ringingCall.getVideoState());
+                if (!isAnswercallInProgress) {
+                    mCallsManager.answerCall(ringingCall, ringingCall.getVideoState());
+                    Log.i(TAG, "CHLD = 1 :There is ringing call: isAnswercallInProgress:" +
+                                         isAnswercallInProgress);
+                    isAnswercallInProgress = true;
+                }
             } else if (heldCall != null) {
                 mCallsManager.unholdCall(heldCall);
             }
@@ -532,7 +590,11 @@ public class BluetoothPhoneServiceImpl {
                 updateHeadsetWithCallState(true /* force */);
                 return true;
             } else if (ringingCall != null) {
-                mCallsManager.answerCall(ringingCall, VideoProfile.STATE_AUDIO_ONLY);
+                if (!isAnswercallInProgress) {
+                    mCallsManager.answerCall(ringingCall, VideoProfile.STATE_AUDIO_ONLY);
+                    Log.i(TAG, "CHLD = 2: isAnswercallInProgress:" + isAnswercallInProgress);
+                    isAnswercallInProgress = true;
+                }
                 return true;
             } else if (heldCall != null) {
                 // CallsManager will hold any active calls when unhold() is called on a
@@ -769,6 +831,15 @@ public class BluetoothPhoneServiceImpl {
             boolean sendDialingFirst = mBluetoothCallState != bluetoothCallState &&
                     bluetoothCallState == CALL_STATE_ALERTING;
 
+            if (numActiveCalls > 0) {
+                    Log.i(TAG, "updateHeadsetWithCallState: Call active");
+                    boolean isCsCall = ((activeCall != null) &&
+                            !(activeCall.can(Connection.PROPERTY_HIGH_DEF_AUDIO) ||
+                            activeCall.can(Connection.PROPERTY_WIFI)));
+                    final Intent intent = new Intent(TelecomManager.ACTION_CALL_TYPE);
+                    intent.putExtra(TelecomManager.EXTRA_CALL_TYPE_CS, isCsCall);
+                    mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
+            }
             mOldHeldCall = heldCall;
             mNumActiveCalls = numActiveCalls;
             mNumChildrenOfActiveCall = numChildrenOfActiveCall;

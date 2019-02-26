@@ -341,7 +341,8 @@ public class ConnectionServiceFocusManager {
 
         for (int i = 0; i < PRIORITY_FOCUS_CALL_STATE.length; i++) {
             for (CallFocus call : calls) {
-                if (call.getState() == PRIORITY_FOCUS_CALL_STATE[i]) {
+                if (call.getState() == PRIORITY_FOCUS_CALL_STATE[i] &&
+                       (((Call) call).getParentCall() == null)) {
                     mCurrentFocusCall = call;
                     Log.d(this, "updateCurrentFocusCall %s", mCurrentFocusCall);
                     return;
