@@ -70,12 +70,8 @@ public final class TelephonyUtil {
     }
 
     public static boolean shouldProcessAsEmergency(Context context, Uri handle) {
-        try {
-            TelephonyManager tm = (TelephonyManager) context.getSystemService(
-                    Context.TELEPHONY_SERVICE);
-            return handle != null && tm.isEmergencyNumber(handle.getSchemeSpecificPart());
-        } catch (IllegalStateException ise) {
-            return false;
-        }
+        TelephonyManager tm = (TelephonyManager) context.getSystemService(
+                Context.TELEPHONY_SERVICE);
+        return handle != null && tm.isEmergencyNumber(handle.getSchemeSpecificPart());
     }
 }
